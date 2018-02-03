@@ -1,29 +1,38 @@
+import json
 import jsonschema
 import inspect
 
 Undefined = object()
 
 
-def hash_schema(val):
+def hash_schema(schema, use_json=True):
     """
-    Compute a unique hash of a nested dictionary, properly handling dicts,
-    lists, and sets.
+    Compute a python hash for a nested dictionary which
+    properly handles dicts, lists, sets, and tuples.
+
+    This implements two methods: one based on conversion to JSON, and one based
+    on recursive conversions of unhashable to hashable types.
     """
-    def _freeze(val):
-        if isinstance(val, dict):
-            return frozenset((k, _freeze(v)) for k, v in val.items())
-        elif isinstance(val, set):
-            return frozenset(map(_freeze, val))
-        elif isinstance(val, list) or isinstance(val, tuple):
-            return tuple(map(_freeze, val))
-        else:
-            return val
-    return hash(_freeze(val))
+    if use_json:
+        s = json.dumps(schema, sort_keys=True)
+        return hash(s)
+    else:
+        def _freeze(val):
+            if isinstance(val, dict):
+                return frozenset((k, _freeze(v)) for k, v in val.items())
+            elif isinstance(val, set):
+                return frozenset(map(_freeze, val))
+            elif isinstance(val, list) or isinstance(val, tuple):
+                return tuple(map(_freeze, val))
+            else:
+                return val
+        return hash(_freeze(schema))
 
 
 class BaseObject(object):
     _json_schema = {}
-    _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema')
+    _schema_registry = {}
+    _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema', '_schema_registry')
 
     def __init__(self, **kwds):
         for key, val in kwds.items():
@@ -54,3 +63,11 @@ class BaseObject(object):
         if validate:
             jsonschema.validate(dct, self._json_schema)
         return dct
+
+    @classmethod
+    def from_dict(cls, dct, validate=True):
+        # TODO: we need to be smarter about this, and instantiate appropriate
+        # subclasses from the values associated with each property.
+        if validate:
+            jsonschema.validate(dct, cls._json_schema)
+        return cls(**dct)

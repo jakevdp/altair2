@@ -62,3 +62,17 @@ def test_schema_hash():
 
     assert Bar._json_schema_hash() == Derived._json_schema_hash()
     assert Foo._json_schema_hash() == hash_schema(Foo._json_schema)
+
+
+def test_round_trip():
+    D = {'a': 4, 'b': 'yo'}
+    assert Derived.from_dict(D).to_dict() == D
+
+    D = {'a': 4, 'c': {'d': 'hey'}}
+    assert Derived.from_dict(D).to_dict() == D
+
+    D = {'a': 4, 'b': '5', 'c': {'d': 'val'}}
+    assert Derived.from_dict(D).to_dict() == D
+
+    D = {'d': 'hello', 'f': 4}
+    assert Foo.from_dict(D).to_dict() == D
