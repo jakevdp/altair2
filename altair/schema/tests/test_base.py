@@ -2,6 +2,7 @@ import jsonschema
 import pytest
 
 from .. import BaseObject, Undefined
+from ..base import hash_schema
 
 
 class Derived(BaseObject):
@@ -53,3 +54,11 @@ def test_schema_cases():
     with pytest.raises(jsonschema.ValidationError):
         # Foo.d needs to be a string
         Derived(c=Foo(4)).to_dict()
+
+
+def test_schema_hash():
+    class Bar(BaseObject):
+        _json_schema = {key: val for key, val in sorted(Derived._json_schema.items())}
+
+    assert Bar._json_schema_hash() == Derived._json_schema_hash()
+    assert Foo._json_schema_hash() == hash_schema(Foo._json_schema)
