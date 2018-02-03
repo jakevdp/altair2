@@ -16,8 +16,12 @@ ALTAIR_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__),
 EXAMPLE_PATH = os.path.join(ALTAIR_PATH, 'examples', 'spec')
 SCHEMA_PATH = os.path.join(ALTAIR_PATH, "schema")
 
-                              
-def download_vegalite_schema(version=VEGALITE_VERSION):
+
+def download_vegalite_schema(version):
+    """
+    Download the vega-lite schema from github, and place in the appropriate
+    location in the altair source tree
+    """
     version = str(version)
     url = SCHEMA_URL.format(library='vega-lite', version=version)
     if not os.path.exists(SCHEMA_PATH):
@@ -27,14 +31,18 @@ def download_vegalite_schema(version=VEGALITE_VERSION):
     request.urlretrieve(url, outpath)
 
 
-def download_vegalite_examples(version=VEGALITE_VERSION):
+def download_vegalite_examples(version):
+    """
+    Download the vega-lite examples from github, and place in the appropriate
+    location in the altair source tree
+    """
     response = request.urlopen(VEGALITE_RELEASE.format(library='vega-lite',
                                                        version='2.1.1'))
     z = zipfile.ZipFile(io.BytesIO(response.read()))
-    
+
     if not os.path.exists(EXAMPLE_PATH):
         os.makedirs(EXAMPLE_PATH)
-        
+
     for filename in os.listdir(EXAMPLE_PATH):
         if filename.endswith('.vl.json'):
             os.remove(os.path.join(EXAMPLE_PATH, filename))
@@ -49,10 +57,15 @@ def download_vegalite_examples(version=VEGALITE_VERSION):
                     shutil.copyfileobj(zf, out)
 
 
+def update_vegalite_version_file(version):
+    version_file = os.path.join(SCHEMA_PATH, '_version.py')
+    with open(version_file, 'w') as f:
+        f.write("vegalite_version = {0}".format(repr(version)))
+
+
+
 if __name__ == '__main__':
-    download_vegalite_schema()
-    download_vegalite_examples()
-
-
-    
-    
+    version = VEGALITE_VERSION
+    #download_vegalite_schema(version)
+    #download_vegalite_examples(version)
+    update_vegalite_version_file(version)
