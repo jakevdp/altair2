@@ -1,7 +1,7 @@
 import json
 import os
 from ._version import vegalite_version
-from .base import BaseObject, Undefined
+from .base import SchemaBase, Undefined
 
 
 def load_schema():

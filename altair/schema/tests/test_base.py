@@ -1,11 +1,11 @@
 import jsonschema
 import pytest
 
-from .. import BaseObject, Undefined
+from .. import SchemaBase, Undefined
 from ..base import hash_schema
 
 
-class Derived(BaseObject):
+class Derived(SchemaBase):
     _json_schema = {
         'definitions': {
             'Foo': {
@@ -23,7 +23,7 @@ class Derived(BaseObject):
     }
 
 
-class Foo(BaseObject):
+class Foo(SchemaBase):
     _json_schema = {
         "$ref": "#/definitions/Foo",
         'definitions': Derived._json_schema['definitions']
@@ -64,7 +64,7 @@ def test_schema_hash():
 def test_schema_hash_registry():
     for cls in [Derived, Foo]:
         hash_ = cls._json_schema_hash()
-        assert BaseObject._schema_registry[hash_] is cls
+        assert cls in SchemaBase._schema_registry[hash_]
 
 
 def test_round_trip():
@@ -79,3 +79,13 @@ def test_round_trip():
 
     D = {'d': 'hello', 'f': 4}
     assert Foo.from_dict(D).to_dict() == D
+
+
+def test_from_dict():
+    print(Derived._json_schema['properties']['c'])
+    print(Foo._json_schema)
+    D = {'a': 4, 'b': '5', 'c': {'d': 'val'}}
+    obj = Derived.from_dict(D)
+    assert obj.a == 4
+    assert obj.b == '5'
+    assert isinstance(obj.c, Foo)
