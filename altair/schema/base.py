@@ -1,9 +1,10 @@
-import json
-import jsonschema
+import collections
 import inspect
-from collections import defaultdict
+import json
 
+import jsonschema
 import six
+
 
 Undefined = object()
 
@@ -18,7 +19,8 @@ def hash_schema(schema, use_json=True,
     listed in `exclude_keys`.
 
     This implements two methods: one based on conversion to JSON, and one based
-    on recursive conversions of unhashable to hashable types.
+    on recursive conversions of unhashable to hashable types; the former seems
+    to be slightly faster in several benchmarks.
     """
     if exclude_keys:
         schema = {key: val for key, val in schema.items()
@@ -50,7 +52,7 @@ class SchemaHashRegistry(type):
     def __init__(cls, name, bases, dct):
         if not hasattr(cls, '_schema_registry'):
             # this is the base class.  Initialize the registry
-            cls._schema_registry = defaultdict(list)
+            cls._schema_registry = collections.defaultdict(list)
         else:
             # this is a derived class.  Add cls to the registry
             cls._schema_registry[cls._json_schema_hash()].append(cls)
@@ -60,7 +62,8 @@ class SchemaHashRegistry(type):
 @six.add_metaclass(SchemaHashRegistry)
 class SchemaBase(object):
     _json_schema = {}
-    _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema', '_schema_registry')
+    _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema',
+                             '_schema_registry')
 
     def __init__(self, **kwds):
         for key, val in kwds.items():
@@ -73,7 +76,7 @@ class SchemaBase(object):
 
     def __attrs(self):
         """Return a list of instance attributes"""
-        members = inspect.getmembers(self, lambda a: (not inspect.isroutine(a)))
+        members = inspect.getmembers(self, lambda a: not inspect.isroutine(a))
         return [name for name, val in members
                 if not (name.startswith('__') and name.endswith('__'))
                 and name not in self._attr_names_to_ignore]

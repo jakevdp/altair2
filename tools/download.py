@@ -60,7 +60,7 @@ def download_vegalite_examples(version):
 def update_vegalite_version_file(version):
     version_file = os.path.join(SCHEMA_PATH, '_version.py')
     with open(version_file, 'w') as f:
-        f.write("vegalite_version = {0}".format(repr(version)))
+        f.write("vegalite_version = {0}\n".format(repr(version)))
 
 
 
