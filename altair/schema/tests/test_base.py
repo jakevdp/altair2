@@ -34,6 +34,27 @@ class Foo(SchemaBase):
         super(Foo, self).__init__(**kwds)
 
 
+class SimpleUnion(SchemaBase):
+    _json_schema = {
+        'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
+    }
+
+    def __init__(self, val):
+        super(SimpleUnion, self).__init__(val)
+
+
+class SimpleArray(SchemaBase):
+    _json_schema = {
+        'type': 'array',
+        'items': {
+            'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
+        }
+    }
+
+    def __init__(self, val):
+        super(SimpleArray, self).__init__(val)
+
+
 def test_schema_cases():
     assert Derived(a=4, b='yo').to_dict() == {'a': 4, 'b': 'yo'}
     assert Derived(a=4, c={'d': 'hey'}).to_dict() == {'a': 4, 'c': {'d': 'hey'}}
@@ -82,13 +103,21 @@ def test_round_trip():
 
 
 def test_from_dict():
-    print(Derived._json_schema['properties']['c'])
-    print(Foo._json_schema)
     D = {'a': 4, 'b': '5', 'c': {'d': 'val'}}
     obj = Derived.from_dict(D)
     assert obj.a == 4
     assert obj.b == '5'
     assert isinstance(obj.c, Foo)
+
+
+def test_simple_type():
+    assert SimpleUnion(4).to_dict() == 4
+    assert SimpleUnion.from_dict('4')._simple_schema_value == '4'
+
+
+def test_simple_array():
+    assert SimpleArray([4, 5, 'six']).to_dict() == [4, 5, 'six']
+    assert SimpleArray.from_dict(list('abc')).to_dict() == list('abc')
 
 
 def test_undefined_singleton():

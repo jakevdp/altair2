@@ -76,13 +76,31 @@ class SchemaBase(object):
     used for validation. Optionally, you can also specialize define the
     __init__ function with appropriate properties.
     """
+    _simple_schema_value = Undefined
     _json_schema = {}
     _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema',
-                             '_schema_registry')
+                             '_schema_registry', '_simple_schema_value')
 
-    def __init__(self, **kwds):
-        for key, val in kwds.items():
-            setattr(self, key, val)
+    # TODO: use getattr/getattribute & setattr to access properties? This may
+    #       be cleaner overall than the _attr_names_to_ignore approach, but
+    #       required a bit of finesse (i.e. using object.__getattribute__ to
+    #       prevent infinite recursion when looking up non-property members).
+    #       Issue with the current approach is that if someone has a json schema
+    #       with a property that is among the above names, this will silently
+    #       ignore it.
+
+    def __init__(self, *args, **kwds):
+        # Two valid options for initialization, which should be handled by
+        # derived classes:
+        # - a single arg with no kwds
+        # - zero args with zero or more kwds
+        if len(args) == 1 and len(kwds) == 0:
+            self._simple_schema_value = args[0]
+        elif len(args) == 0:
+            for key, val in kwds.items():
+                setattr(self, key, val)
+        else:
+            raise ValueError("Multiple arguments must be passed by keyword")
 
     @classmethod
     def _json_schema_hash(cls):
@@ -119,13 +137,31 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and the dict does not conform to the schema
         """
-        dct = {attr: (val.to_dict(validate=validate)
-                      if isinstance(val, SchemaBase) else val)
-               for attr, val in self.__attr_dict().items()
-               if val is not Undefined}
+        def _todict(val):
+            if isinstance(val, SchemaBase):
+                return val.to_dict()
+            else:
+                return val
+
+        dct = {attr: _todict(v) for attr, v in self.__attr_dict().items()
+               if v is not Undefined}
+        val = self._simple_schema_value
+
+        if val is not Undefined and len(dct) > 0:
+            raise ValueError("{0} instance has both a value and properties : "
+                             "cannot serialize to dict")
+
+        if val is Undefined:
+            result = dct
+        elif type(val) is dict:
+            result = {attr: _todict(v) for attr, v in val.items()}
+        elif type(val) is list:
+            result = [_todict(v) for v in val]
+        else:
+            result = val
         if validate:
-            jsonschema.validate(dct, self._json_schema)
-        return dct
+            jsonschema.validate(result, self._json_schema)
+        return result
 
     @classmethod
     def from_dict(cls, dct, validate=True):
@@ -152,11 +188,18 @@ class SchemaBase(object):
         # TODO: implement additionalProperties & patternProperties
         if validate:
             jsonschema.validate(dct, cls._json_schema)
-        props = cls._json_schema.get('properties', {})
-        hashes = {prop: hash_schema(val) for prop, val in props.items()}
-        matches = {prop: cls._schema_registry[hash_]
-                   for prop, hash_ in hashes.items()}
-        wrappers = {prop: match[0] for prop, match in matches.items() if match}
-        dct = {key: wrappers[key].from_dict(val) if key in wrappers else val
-               for key, val in dct.items()}
-        return cls(**dct)
+        if isinstance(dct, dict):
+            props = cls._json_schema.get('properties', {})
+            hashes = {prop: hash_schema(val) for prop, val in props.items()}
+            matches = {prop: cls._schema_registry[hash_]
+                       for prop, hash_ in hashes.items()}
+
+            # TODO: do something more than simply selecting the last match?
+            wrappers = {prop: match[-1] for prop, match in matches.items() if match}
+            kwds = {key: wrappers[key].from_dict(val) if key in wrappers else val
+                    for key, val in dct.items()}
+            return cls(**kwds)
+        else:
+            # TODO: if dct is a list, we need to find wrappers from
+            #       the 'items' property of the schema
+            return cls(dct)
