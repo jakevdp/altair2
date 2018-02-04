@@ -2,6 +2,8 @@ import json
 import jsonschema
 import inspect
 
+import six
+
 Undefined = object()
 
 
@@ -29,6 +31,21 @@ def hash_schema(schema, use_json=True):
         return hash(_freeze(schema))
 
 
+class SchemaHashRegistry(type):
+    # use __init__ rather than __new__ to modify attributes of
+    # the class *after* they have been created
+    def __init__(cls, name, bases, dct):
+        if not hasattr(cls, '_schema_registry'):
+            # this is the base class.  Create an empty registry
+            cls._schema_registry = {}
+        else:
+            # this is a derived class.  Add cls to the registry
+            hash_ = cls._json_schema_hash()
+            cls._schema_registry[hash_] = cls
+        super(SchemaHashRegistry, cls).__init__(name, bases, dct)
+
+
+@six.add_metaclass(SchemaHashRegistry)
 class BaseObject(object):
     _json_schema = {}
     _schema_registry = {}

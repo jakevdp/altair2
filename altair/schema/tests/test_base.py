@@ -57,11 +57,14 @@ def test_schema_cases():
 
 
 def test_schema_hash():
-    class Bar(BaseObject):
-        _json_schema = {key: val for key, val in sorted(Derived._json_schema.items())}
-
-    assert Bar._json_schema_hash() == Derived._json_schema_hash()
     assert Foo._json_schema_hash() == hash_schema(Foo._json_schema)
+    assert Derived._json_schema_hash() == hash_schema(Derived._json_schema)
+
+
+def test_schema_hash_registry():
+    for cls in [Derived, Foo]:
+        hash_ = cls._json_schema_hash()
+        assert BaseObject._schema_registry[hash_] is cls
 
 
 def test_round_trip():
