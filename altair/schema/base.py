@@ -6,7 +6,16 @@ import jsonschema
 import six
 
 
-Undefined = object()
+class UndefinedType(object):
+    """A singleton object for marking undefined attributes"""
+    __instance = None
+    def __new__(cls, *args, **kwargs):
+        if not isinstance(cls.__instance, cls):
+            cls.__instance = object.__new__(cls, *args, **kwargs)
+        return cls.__instance
+    def __repr__(self):
+        return 'Undefined'
+Undefined = UndefinedType()
 
 
 def hash_schema(schema, use_json=True,
@@ -61,6 +70,12 @@ class SchemaHashRegistry(type):
 
 @six.add_metaclass(SchemaHashRegistry)
 class SchemaBase(object):
+    """Base class for schema wrappers.
+
+    Each derived class should set the _json_schema class attribute which is
+    used for validation. Optionally, you can also specialize define the
+    __init__ function with appropriate properties.
+    """
     _json_schema = {}
     _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema',
                              '_schema_registry')
@@ -86,7 +101,24 @@ class SchemaBase(object):
         return {attr: getattr(self, attr) for attr in self.__attrs()}
 
     def to_dict(self, validate=True):
-        """return a dictionary representation of the object"""
+        """Return a dictionary representation of the object
+
+        Parameters
+        ----------
+        validate : boolean
+            If True (default), then validate the output dictionary
+            against the schema.
+
+        Returns
+        -------
+        dct : dictionary
+            The dictionary representation of this object
+
+        Raises
+        ------
+        jsonschema.ValidationError :
+            if validate=True and the dict does not conform to the schema
+        """
         dct = {attr: (val.to_dict(validate=validate)
                       if isinstance(val, SchemaBase) else val)
                for attr, val in self.__attr_dict().items()
@@ -97,14 +129,34 @@ class SchemaBase(object):
 
     @classmethod
     def from_dict(cls, dct, validate=True):
+        """Construct class from a dictionary representation
+
+        Parameters
+        ----------
+        dct : dictionary
+            The dict from which to construct the class
+        validate : boolean
+            If True (default), then validate the output dictionary
+            against the schema.
+
+        Returns
+        -------
+        obj : Schema object
+            The wrapped schema
+
+        Raises
+        ------
+        jsonschema.ValidationError :
+            if validate=True and dct does not conform to the schema
+        """
         # TODO: implement additionalProperties & patternProperties
         if validate:
             jsonschema.validate(dct, cls._json_schema)
         props = cls._json_schema.get('properties', {})
         hashes = {prop: hash_schema(val) for prop, val in props.items()}
-        wrappers = {prop: cls._schema_registry[hash_][0]
-                    for prop, hash_ in hashes.items()
-                    if hash_ in cls._schema_registry}
+        matches = {prop: cls._schema_registry[hash_]
+                   for prop, hash_ in hashes.items()}
+        wrappers = {prop: match[0] for prop, match in matches.items() if match}
         dct = {key: wrappers[key].from_dict(val) if key in wrappers else val
                for key, val in dct.items()}
         return cls(**dct)

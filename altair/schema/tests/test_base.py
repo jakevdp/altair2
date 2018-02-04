@@ -2,7 +2,7 @@ import jsonschema
 import pytest
 
 from .. import SchemaBase, Undefined
-from ..base import hash_schema
+from ..base import hash_schema, UndefinedType
 
 
 class Derived(SchemaBase):
@@ -89,3 +89,7 @@ def test_from_dict():
     assert obj.a == 4
     assert obj.b == '5'
     assert isinstance(obj.c, Foo)
+
+
+def test_undefined_singleton():
+    assert Undefined is UndefinedType()
