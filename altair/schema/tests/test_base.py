@@ -6,8 +6,6 @@ from ..base import hash_schema, UndefinedType, resolve_references
 
 
 class Derived(SchemaBase):
-    #def __init__(self, *args, **kwds):
-    #    super(Derived, self).__init__(*args, **kwds)
     _json_schema = {
         'definitions': {
             'Foo': {
@@ -48,7 +46,6 @@ class SimpleArray(SchemaBase):
 
 
 def test_schema_cases():
-    print(Derived)
     assert Derived(a=4, b='yo').to_dict() == {'a': 4, 'b': 'yo'}
     assert Derived(a=4, c={'d': 'hey'}).to_dict() == {'a': 4, 'c': {'d': 'hey'}}
     assert Derived(a=4, b='5', c=Foo('val')).to_dict() == {'a': 4, 'b': '5', 'c': {'d': 'val'}}
