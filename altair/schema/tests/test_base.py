@@ -2,10 +2,12 @@ import jsonschema
 import pytest
 
 from .. import SchemaBase, Undefined
-from ..base import hash_schema, UndefinedType
+from ..base import hash_schema, UndefinedType, resolve_references
 
 
 class Derived(SchemaBase):
+    #def __init__(self, *args, **kwds):
+    #    super(Derived, self).__init__(*args, **kwds)
     _json_schema = {
         'definitions': {
             'Foo': {
@@ -29,18 +31,11 @@ class Foo(SchemaBase):
         'definitions': Derived._json_schema['definitions']
     }
 
-    def __init__(self, d=Undefined, **kwds):
-        kwds['d'] = d
-        super(Foo, self).__init__(**kwds)
-
 
 class SimpleUnion(SchemaBase):
     _json_schema = {
         'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
     }
-
-    def __init__(self, val):
-        super(SimpleUnion, self).__init__(val)
 
 
 class SimpleArray(SchemaBase):
@@ -51,11 +46,9 @@ class SimpleArray(SchemaBase):
         }
     }
 
-    def __init__(self, val):
-        super(SimpleArray, self).__init__(val)
-
 
 def test_schema_cases():
+    print(Derived)
     assert Derived(a=4, b='yo').to_dict() == {'a': 4, 'b': 'yo'}
     assert Derived(a=4, c={'d': 'hey'}).to_dict() == {'a': 4, 'c': {'d': 'hey'}}
     assert Derived(a=4, b='5', c=Foo('val')).to_dict() == {'a': 4, 'b': '5', 'c': {'d': 'val'}}
@@ -65,16 +58,16 @@ def test_schema_cases():
     assert Foo().to_dict() == {}
 
     with pytest.raises(jsonschema.ValidationError):
-        # no additional properties allowed
-        Derived(foo='bar').to_dict()
-
-    with pytest.raises(jsonschema.ValidationError):
         # a needs to be an integer
         Derived(a='yo').to_dict()
 
     with pytest.raises(jsonschema.ValidationError):
         # Foo.d needs to be a string
         Derived(c=Foo(4)).to_dict()
+
+    with pytest.raises(TypeError):
+        # no additional properties allowed
+        Derived(foo='bar').to_dict()
 
 
 def test_schema_hash():
@@ -122,3 +115,15 @@ def test_simple_array():
 
 def test_undefined_singleton():
     assert Undefined is UndefinedType()
+
+
+def test_resolve_references():
+    schema = {
+        '$ref': '#/definitions/Foo',
+        'definitions': {
+            'Foo': {'$ref': '#/definitions/Bar'},
+            'Bar': {'$ref': '#/definitions/Baz'},
+            'Baz': {'type': 'string'}
+        }
+    }
+    assert resolve_references(schema) == {'type': 'string'}

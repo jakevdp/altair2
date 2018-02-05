@@ -18,6 +18,22 @@ class UndefinedType(object):
 Undefined = UndefinedType()
 
 
+def resolve_references(schema, context=None):
+    """Resolve References"""
+    if context is None:
+        context = schema
+    if '$ref' in schema:
+        address = schema['$ref'].split('/')
+        assert address[0] == '#'
+        schema = context
+        print(schema)
+        for key in address[1:]:
+            schema = schema[key]
+        return resolve_references(schema, context)
+    else:
+        return schema
+
+
 def hash_schema(schema, use_json=True,
                 exclude_keys=['definitions', 'description', '$schema']):
     """
@@ -50,6 +66,58 @@ def hash_schema(schema, use_json=True,
         return hash(_freeze(schema))
 
 
+def init_code(schema, classname):
+    """Given a JSON schema, create an appropriate __init__ function"""
+    schema = resolve_references(schema)
+
+    # find required properties
+    required = set(schema.get('required', []))
+
+    # find listed properties
+    props = set(schema.get('properties', [])) - required
+
+    # find whether additional properties are allowed
+    additional_props = schema.get('additionalProperties', {})
+    pattern_props = schema.get('patternProperties', {})
+    allow_extra_kwds = pattern_props or additional_props or (additional_props == {})
+
+    # determine whether this is an object, a value, or perhaps both
+    type_ = schema.get('type', None)
+    is_object = type_ in ['object', None]
+    is_value = (not is_object) or (type_ is None and not (props or required))
+
+    # build function signature
+    args = ['self']
+    if is_value:
+        # TODO: prevent name collisions
+        args.append('value_')
+    if is_object:
+        args.extend(sorted(required))
+        args.extend(sorted(['{0}=Undefined'.format(prop) for prop in props]))
+        if allow_extra_kwds:
+            args.append('**kwds')
+    signature = "def __init__({0}):".format(', '.join(args))
+
+    # function contents
+    code = [signature]
+    init_args = []
+    if is_value:
+        code.append('self._simple_schema_value = value_')
+        init_args.append('value_')
+    if is_object:
+        args = ["'{0}': {0}".format(arg)
+                for arg in (sorted(required) + sorted(props))]
+        argdict = "{" + ', '.join(args) + "}"
+        if allow_extra_kwds:
+            code.append("kwds.update({0})".format(argdict))
+        else:
+            code.append("kwds = {0}".format(argdict))
+        init_args.append('**kwds')
+    code.append('super({classname}, self).__init__({args})'.format(classname=classname,
+                                                                   args=', '.join(init_args)))
+    return '\n    '.join(code)
+
+
 class SchemaHashRegistry(type):
     """
     A metaclass for SchemaBase which does one thing: every derived class will
@@ -59,6 +127,17 @@ class SchemaHashRegistry(type):
     This is required for the ``from_dict`` functionality in SchemaBase.
     """
     def __init__(cls, name, bases, dct):
+        # Add init function if not defined explicitly in the class
+        if '__init__' not in dct:
+            schema = dct.get('_json_schema', {})
+            # Because of the super() call, we need cls to be in global scope
+            globals_ = {name: cls, 'Undefined': Undefined}
+            code = init_code(schema, name)
+            exec(code, globals_, dct)
+            # The result of the executed function definition is in dct
+            setattr(cls, '__init__', dct['__init__'])
+
+        # Add this class to the registry
         if not hasattr(cls, '_schema_registry'):
             # this is the base class.  Initialize the registry
             cls._schema_registry = collections.defaultdict(list)
