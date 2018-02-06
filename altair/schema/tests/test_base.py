@@ -2,7 +2,7 @@ import jsonschema
 import pytest
 
 from .. import SchemaBase, Undefined
-from ..base import hash_schema, UndefinedType, resolve_references
+from ..base import hash_schema, UndefinedType
 
 
 class Derived(SchemaBase):
@@ -41,6 +41,18 @@ class SimpleArray(SchemaBase):
         'type': 'array',
         'items': {
             'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
+        }
+    }
+
+
+class InvalidProperties(SchemaBase):
+    _json_schema = {
+        'type': 'object',
+        'properties': {
+            'for': {},
+            'as': {},
+            'vega-lite': {},
+            '$schema': {}
         }
     }
 
@@ -110,17 +122,15 @@ def test_simple_array():
     assert SimpleArray.from_dict(list('abc')).to_dict() == list('abc')
 
 
+def test_invalid_properties():
+    dct = {'for': 2, 'as': 3, 'vega-lite': 4, '$schema': 5}
+    invalid = InvalidProperties.from_dict(dct)
+    assert invalid.for_ == 2
+    assert invalid.as_ == 3
+    assert invalid.vegalite == 4
+    assert invalid.schema == 5
+    assert invalid.to_dict() == dct
+
+
 def test_undefined_singleton():
     assert Undefined is UndefinedType()
-
-
-def test_resolve_references():
-    schema = {
-        '$ref': '#/definitions/Foo',
-        'definitions': {
-            'Foo': {'$ref': '#/definitions/Bar'},
-            'Bar': {'$ref': '#/definitions/Baz'},
-            'Baz': {'type': 'string'}
-        }
-    }
-    assert resolve_references(schema) == {'type': 'string'}

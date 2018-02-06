@@ -16,4 +16,4 @@ def load_example(name):
 
 def iter_example_json():
     for name in iter_example_names():
-        return load_example(name)
+        yield load_example(name)

@@ -1,9 +1,13 @@
 import collections
 import inspect
 import json
+import keyword
+import re
 
 import jsonschema
 import six
+
+from .utils import hash_schema, SchemaInfo
 
 
 class UndefinedType(object):
@@ -16,106 +20,6 @@ class UndefinedType(object):
     def __repr__(self):
         return 'Undefined'
 Undefined = UndefinedType()
-
-
-def resolve_references(schema, context=None):
-    """Resolve References"""
-    if context is None:
-        context = schema
-    if '$ref' in schema:
-        address = schema['$ref'].split('/')
-        assert address[0] == '#'
-        schema = context
-        print(schema)
-        for key in address[1:]:
-            schema = schema[key]
-        return resolve_references(schema, context)
-    else:
-        return schema
-
-
-def hash_schema(schema, use_json=True,
-                exclude_keys=['definitions', 'description', '$schema']):
-    """
-    Compute a python hash for a nested dictionary which
-    properly handles dicts, lists, sets, and tuples.
-
-    At the top level, the function excludes from the hashed schema all keys
-    listed in `exclude_keys`.
-
-    This implements two methods: one based on conversion to JSON, and one based
-    on recursive conversions of unhashable to hashable types; the former seems
-    to be slightly faster in several benchmarks.
-    """
-    if exclude_keys:
-        schema = {key: val for key, val in schema.items()
-                  if key not in exclude_keys}
-    if use_json:
-        s = json.dumps(schema, sort_keys=True)
-        return hash(s)
-    else:
-        def _freeze(val):
-            if isinstance(val, dict):
-                return frozenset((k, _freeze(v)) for k, v in val.items())
-            elif isinstance(val, set):
-                return frozenset(map(_freeze, val))
-            elif isinstance(val, list) or isinstance(val, tuple):
-                return tuple(map(_freeze, val))
-            else:
-                return val
-        return hash(_freeze(schema))
-
-
-def init_code(schema, classname):
-    """Given a JSON schema, create an appropriate __init__ function"""
-    schema = resolve_references(schema)
-
-    # find required properties
-    required = set(schema.get('required', []))
-
-    # find listed properties
-    props = set(schema.get('properties', [])) - required
-
-    # find whether additional properties are allowed
-    additional_props = schema.get('additionalProperties', {})
-    pattern_props = schema.get('patternProperties', {})
-    allow_extra_kwds = pattern_props or additional_props or (additional_props == {})
-
-    # determine whether this is an object, a value, or perhaps both
-    type_ = schema.get('type', None)
-    is_object = type_ in ['object', None]
-    is_value = (not is_object) or (type_ is None and not (props or required))
-
-    # build function signature
-    args = ['self']
-    if is_value:
-        # TODO: prevent name collisions
-        args.append('value_')
-    if is_object:
-        args.extend(sorted(required))
-        args.extend(sorted(['{0}=Undefined'.format(prop) for prop in props]))
-        if allow_extra_kwds:
-            args.append('**kwds')
-    signature = "def __init__({0}):".format(', '.join(args))
-
-    # function contents
-    code = [signature]
-    init_args = []
-    if is_value:
-        code.append('self._simple_schema_value = value_')
-        init_args.append('value_')
-    if is_object:
-        args = ["'{0}': {0}".format(arg)
-                for arg in (sorted(required) + sorted(props))]
-        argdict = "{" + ', '.join(args) + "}"
-        if allow_extra_kwds:
-            code.append("kwds.update({0})".format(argdict))
-        else:
-            code.append("kwds = {0}".format(argdict))
-        init_args.append('**kwds')
-    code.append('super({classname}, self).__init__({args})'.format(classname=classname,
-                                                                   args=', '.join(init_args)))
-    return '\n    '.join(code)
 
 
 class SchemaBaseMeta(type):
@@ -139,13 +43,23 @@ class SchemaBaseMeta(type):
     https://jakevdp.github.io/blog/2012/12/01/a-primer-on-python-metaclasses/
     """
     def __init__(cls, name, bases, dct):
+        schema = SchemaInfo(dct.get('_json_schema', {}))
+
+        # If it's not provided, add an _valid_attr_map mapping to map invalid
+        # property names to valid python attribute names
+        if '_valid_attr_map' not in dct:
+            setattr(cls, '_valid_attr_map', schema.property_name_map())
+
+        # Add a docstring if not specified
+        if '__doc__' not in dct:
+            setattr(cls, '__doc__', schema.docstring(name))
+
         # Add init function if not defined explicitly in the class
         if '__init__' not in dct:
-            schema = dct.get('_json_schema', {})
+            init_code = schema.init_code(name)
             # Because of the super() call, we need cls to be in global scope
             globals_ = {name: cls, 'Undefined': Undefined}
-            code = init_code(schema, name)
-            exec(code, globals_, dct)
+            exec(init_code, globals_, dct)
             # The result of the executed function definition is in dct
             setattr(cls, '__init__', dct['__init__'])
 
@@ -169,8 +83,10 @@ class SchemaBase(object):
     """
     _simple_schema_value = Undefined
     _json_schema = {}
-    _attr_names_to_ignore = ('_attr_names_to_ignore', '_json_schema',
-                             '_schema_registry', '_simple_schema_value')
+    _valid_attr_map = {}
+    _attr_names_to_ignore = ('_json_schema', '_valid_attr_map',
+                             '_schema_registry', '_simple_schema_value',
+                             '_attr_names_to_ignore')
 
     # TODO: use getattr/getattribute & setattr to access properties? This may
     #       be cleaner overall than the _attr_names_to_ignore approach, but
@@ -228,13 +144,16 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and the dict does not conform to the schema
         """
+        rmap_ = {val: key for key, val in self._valid_attr_map.items()}
+
         def _todict(val):
             if isinstance(val, SchemaBase):
                 return val.to_dict()
             else:
                 return val
 
-        dct = {attr: _todict(v) for attr, v in self.__attr_dict().items()
+        dct = {rmap_.get(attr, attr): _todict(v)
+               for attr, v in self.__attr_dict().items()
                if v is not Undefined}
         val = self._simple_schema_value
 
@@ -276,6 +195,8 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and dct does not conform to the schema
         """
+        map_ = cls._valid_attr_map
+
         # TODO: implement additionalProperties & patternProperties
         if validate:
             jsonschema.validate(dct, cls._json_schema)
@@ -284,10 +205,10 @@ class SchemaBase(object):
             hashes = {prop: hash_schema(val) for prop, val in props.items()}
             matches = {prop: cls._schema_registry[hash_]
                        for prop, hash_ in hashes.items()}
-
             # TODO: do something more than simply selecting the last match?
             wrappers = {prop: match[-1] for prop, match in matches.items() if match}
-            kwds = {key: wrappers[key].from_dict(val) if key in wrappers else val
+            kwds = {map_.get(key, key): (wrappers[key].from_dict(val)
+                                         if key in wrappers else val)
                     for key, val in dct.items()}
             return cls(**kwds)
         else:
