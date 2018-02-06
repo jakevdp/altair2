@@ -116,7 +116,7 @@ class SchemaInfo(object):
         pairs = [(prop, get_valid_identifier(prop)) for prop in self.properties]
         return {prop: val for prop, val in pairs if prop != val}
 
-    def init_code(self, classname):
+    def init_code(self, classname, indent=4):
         """Return code suitable for the __init__ function of a Schema class"""
 
         if self.is_empty() or self.is_compound():
@@ -139,8 +139,8 @@ class SchemaInfo(object):
                 args.append('**kwds')
                 super_args.append('**kwds')
 
-        signature = ("def __init__({args}):\n"
-                     "    super({classname}, self).__init__({super_args})")
+        signature = ("def __init__({args}):\n" + (indent * ' ') +
+                     "super({classname}, self).__init__({super_args})")
         return signature.format(classname=classname,
                                 args=', '.join(['self'] + args),
                                 super_args=', '.join(super_args))
