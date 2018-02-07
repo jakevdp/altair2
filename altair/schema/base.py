@@ -7,7 +7,7 @@ import re
 import jsonschema
 import six
 
-from .utils import hash_schema, SchemaInfo
+from .utils import hash_schema, SchemaInfo, resolve_references
 
 
 class UndefinedType(object):
@@ -148,7 +148,8 @@ class SchemaBase(object):
 
         def _todict(val):
             if isinstance(val, SchemaBase):
-                return val.to_dict()
+                # only validate at the top level
+                return val.to_dict(validate=False)
             else:
                 return val
 
@@ -174,6 +175,45 @@ class SchemaBase(object):
         return result
 
     @classmethod
+    def _from_dict_union(cls, dct, validate=False):
+        """from_dict for an anyOf or oneOf object"""
+        schema = resolve_references(cls._json_schema)
+        schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
+        for schema in schemas:
+            matches = cls._schema_registry[hash_schema(schema)]
+            if not matches:
+                continue
+            try:
+                obj = matches[-1].from_dict(dct, validate=validate)
+            except TypeError:
+                continue
+            except jsonschema.ValidationError:
+                continue
+            else:
+                return obj
+        return None
+
+    @classmethod
+    def _from_dict_object(cls, dct, validate=False):
+        schema = resolve_references(cls._json_schema)
+        map_ = cls._valid_attr_map
+        props = schema.get('properties', {})
+        hashes = {prop: hash_schema(val) for prop, val in props.items()}
+        matches = {prop: cls._schema_registry[hash_]
+                   for prop, hash_ in hashes.items()}
+        # TODO: do something more than simply selecting the last match?
+        wrappers = {prop: match[-1] for prop, match in matches.items() if match}
+        kwds = {map_.get(key, key): (wrappers[key].from_dict(val, validate=validate)
+                                     if key in wrappers else val)
+                for key, val in dct.items()}
+        return cls(**kwds)
+
+    @classmethod
+    def _from_dict_list(cls, dct, validate=False):
+        # TODO: find wrapper class for elements in items
+        return cls(dct)
+
+    @classmethod
     def from_dict(cls, dct, validate=True):
         """Construct class from a dictionary representation
 
@@ -195,23 +235,20 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and dct does not conform to the schema
         """
-        map_ = cls._valid_attr_map
-
         # TODO: implement additionalProperties & patternProperties
         if validate:
             jsonschema.validate(dct, cls._json_schema)
+
+        schema = resolve_references(cls._json_schema)
+
+        if 'anyOf' in schema or 'oneOf' in schema:
+            obj = cls._from_dict_union(dct, validate=False)
+            if obj is not None:
+                return obj
+
         if isinstance(dct, dict):
-            props = cls._json_schema.get('properties', {})
-            hashes = {prop: hash_schema(val) for prop, val in props.items()}
-            matches = {prop: cls._schema_registry[hash_]
-                       for prop, hash_ in hashes.items()}
-            # TODO: do something more than simply selecting the last match?
-            wrappers = {prop: match[-1] for prop, match in matches.items() if match}
-            kwds = {map_.get(key, key): (wrappers[key].from_dict(val)
-                                         if key in wrappers else val)
-                    for key, val in dct.items()}
-            return cls(**kwds)
+            return cls._from_dict_object(dct, validate=False)
+        elif isinstance(dct, list):
+            return cls._from_dict_list(dct, validate=False)
         else:
-            # TODO: if dct is a list, we need to find wrappers from
-            #       the 'items' property of the schema
             return cls(dct)

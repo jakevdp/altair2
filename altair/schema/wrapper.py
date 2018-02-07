@@ -1,5 +1,5 @@
 # The contents of this file are automatically generated
-# at time 2018-02-06 14:51:51
+# at time 2018-02-06 15:24:21
 
 from altair.schema.base import SchemaBase, Undefined
 from altair.schema.loader import load_schema
