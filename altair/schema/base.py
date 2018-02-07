@@ -36,19 +36,19 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
     In all cases, if the attribute/method is explicitly defined in the class
     it will not be overwritten.
 
-    A simple invocation adds all three:
+    A simple invocation adds all three attributes/methods:
 
         @schemaclass
-        class Foo(SchemaBase):
+        class MySchema(SchemaBase):
             _json_schema = {...}
 
-    Optionally, you can invoke schemaclass with arguments to turn off some properties:
+    Optionally, you can invoke schemaclass with arguments to turn off
+    some of the added behaviors:
 
         @schemaclass(init_func=True, docstring=False, property_map=True)
-        class Foo(SchemaBase):
+        class MySchema(SchemaBase):
             _json_schema = {...}
     """
-    assert len(args) < 2
     def _decorator(cls, init_func=init_func, docstring=docstring,
                    property_map=property_map):
         schema = SchemaInfo(getattr(cls, '_json_schema', {}))
@@ -75,7 +75,8 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
     elif len(args) == 1:
         return _decorator(args[0])
     else:
-        raise ValueError("Unrecognized input to schema_class")
+        raise ValueError("optional arguments to schemaclass must be "
+                         "passed by keyword")
 
 
 class SchemaBase(object):
