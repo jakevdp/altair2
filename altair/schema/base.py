@@ -23,11 +23,34 @@ class UndefinedType(object):
 Undefined = UndefinedType()
 
 
-def schema_class(*args, init_func=True, docstring=True, invalid_property_map=True):
-    """A decorator to add boilerplate to a schema class"""
+def schemaclass(*args, init_func=True, docstring=True, property_map=True):
+    """A decorator to add boilerplate to a schema class
+
+    This will read the _json_schema attribute of a SchemaBase class, and add
+    one or all of three attributes/methods, based on the schema:
+
+    - An __init__ function
+    - a __doc__ docstring
+    - an _valid_attr_map that maps property names to valid Python identifiers
+
+    In all cases, if the attribute/method is explicitly defined in the class
+    it will not be overwritten.
+
+    A simple invocation adds all three:
+
+        @schemaclass
+        class Foo(SchemaBase):
+            _json_schema = {...}
+
+    Optionally, you can invoke schemaclass with arguments to turn off some properties:
+
+        @schemaclass(init_func=True, docstring=False, property_map=True)
+        class Foo(SchemaBase):
+            _json_schema = {...}
+    """
     assert len(args) < 2
     def _decorator(cls, init_func=init_func, docstring=docstring,
-                   invalid_property_map=invalid_property_map):
+                   property_map=property_map):
         schema = SchemaInfo(getattr(cls, '_json_schema', {}))
 
         if init_func and '__init__' not in cls.__dict__:
@@ -40,7 +63,7 @@ def schema_class(*args, init_func=True, docstring=True, invalid_property_map=Tru
             exec(init_code, globals_, locals_)
             setattr(cls, '__init__', locals_['__init__'])
 
-        if invalid_property_map and '_valid_attr_map' not in cls.__dict__:
+        if property_map and '_valid_attr_map' not in cls.__dict__:
             schema = SchemaInfo(getattr(cls, '_json_schema', {}))
             setattr(cls, '_valid_attr_map', schema.property_name_map())
             return cls

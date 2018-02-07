@@ -1,11 +1,11 @@
 import jsonschema
 import pytest
 
-from .. import SchemaBase, Undefined
-from ..base import hash_schema, UndefinedType, schema_class
+from .. import SchemaBase, schemaclass, Undefined
+from ..base import hash_schema, UndefinedType
 
 
-@schema_class
+@schemaclass
 class Derived(SchemaBase):
     _json_schema = {
         'definitions': {
@@ -27,7 +27,7 @@ class Derived(SchemaBase):
     }
 
 
-@schema_class
+@schemaclass
 class Foo(SchemaBase):
     _json_schema = {
         "$ref": "#/definitions/Foo",
@@ -35,7 +35,7 @@ class Foo(SchemaBase):
     }
 
 
-@schema_class
+@schemaclass
 class Bar(SchemaBase):
     _json_schema = {
         "$ref": "#/definitions/Bar",
@@ -43,14 +43,14 @@ class Bar(SchemaBase):
     }
 
 
-@schema_class
+@schemaclass
 class SimpleUnion(SchemaBase):
     _json_schema = {
         'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
     }
 
 
-@schema_class
+@schemaclass
 class DefinitionUnion(SchemaBase):
     _json_schema = {
         "anyOf": [
@@ -61,7 +61,7 @@ class DefinitionUnion(SchemaBase):
     }
 
 
-@schema_class
+@schemaclass
 class SimpleArray(SchemaBase):
     _json_schema = {
         'type': 'array',
@@ -71,7 +71,7 @@ class SimpleArray(SchemaBase):
     }
 
 
-@schema_class(invalid_property_map=True)
+@schemaclass(property_map=True)
 class InvalidProperties(SchemaBase):
     _json_schema = {
         'type': 'object',
