@@ -109,6 +109,19 @@ class SchemaBase(object):
         else:
             raise ValueError("Multiple arguments must be passed by keyword")
 
+    def __repr__(self):
+        val = self._simple_schema_value
+        dct = self.__attr_dict()
+        if dct:
+            args = ("{0}={1}".format(key, repr(val))
+                    for key, val in dct.items()
+                    if val is not Undefined)
+            args = '\n' + ',\n'.join(args)
+            args = args.replace('\n', '\n  ')
+            return "{0}({1}\n)".format(self.__class__.__name__, args)
+        else:
+            return "{0}({1})".format(self.__class__.__name__, val)
+
     @classmethod
     def _json_schema_hash(cls):
         """Return a unique hash of this class' _json_schema"""
