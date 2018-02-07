@@ -16,7 +16,8 @@ def refschema():
 
 
 def test_resolve_references(refschema):
-    assert resolve_references(refschema) == {'type': 'string'}
+    assert resolve_references(refschema) == {'type': 'string',
+                                             'definitions': refschema['definitions']}
 
 
 def test_get_valid_identifier():

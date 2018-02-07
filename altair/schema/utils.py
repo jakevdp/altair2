@@ -51,7 +51,11 @@ def resolve_references(schema, context=None):
             schema = schema[key]
         return resolve_references(schema, context)
     else:
-        return schema
+        # Add definitions
+        if 'definitions' in context and 'definitions' not in schema:
+            return dict(definitions=context['definitions'], **schema)
+        else:
+            return schema
 
 
 def get_valid_identifier(prop, replacement_character='', allow_unicode=False):
@@ -82,10 +86,17 @@ class SchemaInfo(object):
                  'additionalProperties': True,
                  'type': None}
     def __init__(self, schema):
+        if hasattr(schema, '_json_schema'):
+            schema = schema._json_schema
         self.raw_schema = schema
         self.schema = resolve_references(schema)
         for key, default in self._defaults.items():
             setattr(self, key, self.schema.get(key, default))
+
+    @property
+    def schema_nodefs(self):
+        return {key: val for key, val in self.schema.items()
+                if key != 'definitions'}
 
     def is_empty(self):
         return set(self.schema.keys()) - set(EXCLUDE_KEYS) == {}
@@ -105,6 +116,25 @@ class SchemaInfo(object):
 
     def is_value(self):
         return not self.is_object()
+
+    def is_array(self):
+        return (self.type == 'array')
+
+    def type(self):
+        if self.is_empty():
+            return 'empty'
+        elif self.is_compound():
+            for key in ['anyOf', 'oneOf', 'allOf']:
+                if key in self.schema:
+                    return key
+        elif self.is_object():
+            return 'object'
+        elif self.is_array():
+            return 'array'
+        elif self.is_value():
+            return 'value'
+        else:
+            raise ValueError("Unknown type with keys {0}".format(self.schema))
 
     def property_name_map(self):
         """

@@ -12,7 +12,7 @@ def schema():
 
 
 @pytest.mark.parametrize('name', iter_example_names())
-def test_example_json(name, schema):
+def _test_example_json(name, schema):
     spec = load_example(name)
     try:
         jsonschema.validate(spec, schema)

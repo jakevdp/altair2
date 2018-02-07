@@ -3,11 +3,12 @@ import inspect
 import json
 import keyword
 import re
+from functools import wraps
 
 import jsonschema
-import six
 
 from .utils import hash_schema, SchemaInfo, resolve_references
+from .visitors import FromDict
 
 
 class UndefinedType(object):
@@ -22,58 +23,38 @@ class UndefinedType(object):
 Undefined = UndefinedType()
 
 
-class SchemaBaseMeta(type):
-    """
-    A metaclass for SchemaBase. The assumption is that each subclass of SchemaBase
-    will be defined by its _json_schema attribute, which is a dict containing a
-    valid JSON schema, and governs the way the class behaves.
+def schema_class(*args, init_func=True, docstring=True, invalid_property_map=True):
+    """A decorator to add boilerplate to a schema class"""
+    assert len(args) < 2
+    def _decorator(cls, init_func=init_func, docstring=docstring,
+                   invalid_property_map=invalid_property_map):
+        schema = SchemaInfo(getattr(cls, '_json_schema', {}))
 
-    SchemaBaseMeta does two things:
+        if init_func and '__init__' not in cls.__dict__:
+            schema = SchemaInfo(getattr(cls, '_json_schema', {}))
+            name = cls.__name__
 
-    - if the class does not explicitly define an __init__() function, then
-      define an appropriate __init__ function based on its _json_schema.
-
-    - create a _schema_registry dict in the base class, and add each subclass
-      to it, indexed by a unique hash computed from its _json_schema. This
-      part is essential for the ``from_dict`` constructor, because it allows
-      the constructor to quickly create an appropriate class hierarchy without
-      having to hard-code all possibilities in the class definition.
-
-    If you're unfamiliar with metaclasses, I have just the blog post for you:
-    https://jakevdp.github.io/blog/2012/12/01/a-primer-on-python-metaclasses/
-    """
-    def __init__(cls, name, bases, dct):
-        schema = SchemaInfo(dct.get('_json_schema', {}))
-
-        # If it's not provided, add an _valid_attr_map mapping to map invalid
-        # property names to valid python attribute names
-        if '_valid_attr_map' not in dct:
-            setattr(cls, '_valid_attr_map', schema.property_name_map())
-
-        # Add a docstring if not specified
-        if '__doc__' not in dct:
-            setattr(cls, '__doc__', schema.docstring(name))
-
-        # Add init function if not defined explicitly in the class
-        if '__init__' not in dct:
             init_code = schema.init_code(name)
-            # Because of the super() call, we need cls to be in global scope
             globals_ = {name: cls, 'Undefined': Undefined}
-            exec(init_code, globals_, dct)
-            # The result of the executed function definition is in dct
-            setattr(cls, '__init__', dct['__init__'])
+            locals_ = {}
+            exec(init_code, globals_, locals_)
+            setattr(cls, '__init__', locals_['__init__'])
 
-        # Add this class to the registry
-        if not hasattr(cls, '_schema_registry'):
-            # this is the base class.  Initialize the registry
-            cls._schema_registry = collections.defaultdict(list)
-        else:
-            # this is a derived class.  Add cls to the registry
-            cls._schema_registry[cls._json_schema_hash()].append(cls)
-        super(SchemaBaseMeta, cls).__init__(name, bases, dct)
+        if invalid_property_map and '_valid_attr_map' not in cls.__dict__:
+            schema = SchemaInfo(getattr(cls, '_json_schema', {}))
+            setattr(cls, '_valid_attr_map', schema.property_name_map())
+            return cls
+
+        if docstring and '__doc__' not in cls.__dict__:
+            setattr(cls, '__doc__', schema.docstring(name))
+    if len(args) == 0:
+        return _decorator
+    elif len(args) == 1:
+        return _decorator(args[0])
+    else:
+        raise ValueError("Unrecognized input to schema_class")
 
 
-@six.add_metaclass(SchemaBaseMeta)
 class SchemaBase(object):
     """Base class for schema wrappers.
 
@@ -85,8 +66,7 @@ class SchemaBase(object):
     _json_schema = {}
     _valid_attr_map = {}
     _attr_names_to_ignore = ('_json_schema', '_valid_attr_map',
-                             '_schema_registry', '_simple_schema_value',
-                             '_attr_names_to_ignore')
+                             '_simple_schema_value', '_attr_names_to_ignore')
 
     # TODO: use getattr/getattribute & setattr to access properties? This may
     #       be cleaner overall than the _attr_names_to_ignore approach, but
@@ -188,45 +168,6 @@ class SchemaBase(object):
         return result
 
     @classmethod
-    def _from_dict_union(cls, dct):
-        """from_dict for an anyOf or oneOf object"""
-        schema = resolve_references(cls._json_schema)
-        schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
-        for schema in schemas:
-            matches = cls._schema_registry[hash_schema(schema)]
-            if not matches:
-                continue
-            try:
-                obj = matches[-1].from_dict(dct, validate=True)
-            except TypeError:
-                continue
-            except jsonschema.ValidationError:
-                continue
-            else:
-                return obj
-        return None
-
-    @classmethod
-    def _from_dict_object(cls, dct, validate=False):
-        schema = resolve_references(cls._json_schema)
-        map_ = cls._valid_attr_map
-        props = schema.get('properties', {})
-        hashes = {prop: hash_schema(val) for prop, val in props.items()}
-        matches = {prop: cls._schema_registry[hash_]
-                   for prop, hash_ in hashes.items()}
-        # TODO: do something more than simply selecting the last match?
-        wrappers = {prop: match[-1] for prop, match in matches.items() if match}
-        kwds = {map_.get(key, key): (wrappers[key].from_dict(val, validate=validate)
-                                     if key in wrappers else val)
-                for key, val in dct.items()}
-        return cls(**kwds)
-
-    @classmethod
-    def _from_dict_list(cls, dct, validate=False):
-        # TODO: find wrapper class for elements in items
-        return cls(dct)
-
-    @classmethod
     def from_dict(cls, dct, validate=True):
         """Construct class from a dictionary representation
 
@@ -248,20 +189,5 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and dct does not conform to the schema
         """
-        # TODO: implement additionalProperties & patternProperties
-        if validate:
-            jsonschema.validate(dct, cls._json_schema)
-
-        schema = resolve_references(cls._json_schema)
-
-        if 'anyOf' in schema or 'oneOf' in schema:
-            obj = cls._from_dict_union(dct)
-            if obj is not None:
-                return obj
-
-        if isinstance(dct, dict):
-            return cls._from_dict_object(dct, validate=False)
-        elif isinstance(dct, list):
-            return cls._from_dict_list(dct, validate=False)
-        else:
-            return cls(dct)
+        converter = FromDict(SchemaBase.__subclasses__())
+        return converter.from_dict(cls, dct, validate=validate)

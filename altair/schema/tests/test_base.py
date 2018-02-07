@@ -2,9 +2,10 @@ import jsonschema
 import pytest
 
 from .. import SchemaBase, Undefined
-from ..base import hash_schema, UndefinedType
+from ..base import hash_schema, UndefinedType, schema_class
 
 
+@schema_class
 class Derived(SchemaBase):
     _json_schema = {
         'definitions': {
@@ -26,23 +27,30 @@ class Derived(SchemaBase):
     }
 
 
+@schema_class
 class Foo(SchemaBase):
     _json_schema = {
         "$ref": "#/definitions/Foo",
         'definitions': Derived._json_schema['definitions']
     }
 
+
+@schema_class
 class Bar(SchemaBase):
     _json_schema = {
         "$ref": "#/definitions/Bar",
         'definitions': Derived._json_schema['definitions']
     }
 
+
+@schema_class
 class SimpleUnion(SchemaBase):
     _json_schema = {
         'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
     }
 
+
+@schema_class
 class DefinitionUnion(SchemaBase):
     _json_schema = {
         "anyOf": [
@@ -52,6 +60,8 @@ class DefinitionUnion(SchemaBase):
         "definitions": Derived._json_schema['definitions']
     }
 
+
+@schema_class
 class SimpleArray(SchemaBase):
     _json_schema = {
         'type': 'array',
@@ -61,6 +71,7 @@ class SimpleArray(SchemaBase):
     }
 
 
+@schema_class(invalid_property_map=True)
 class InvalidProperties(SchemaBase):
     _json_schema = {
         'type': 'object',
@@ -98,12 +109,6 @@ def test_schema_cases():
 def test_schema_hash():
     assert Foo._json_schema_hash() == hash_schema(Foo._json_schema)
     assert Derived._json_schema_hash() == hash_schema(Derived._json_schema)
-
-
-def test_schema_hash_registry():
-    for cls in [Derived, Foo]:
-        hash_ = cls._json_schema_hash()
-        assert cls in SchemaBase._schema_registry[hash_]
 
 
 def test_round_trip():
