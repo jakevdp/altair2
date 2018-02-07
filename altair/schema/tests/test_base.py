@@ -9,11 +9,14 @@ class Derived(SchemaBase):
     _json_schema = {
         'definitions': {
             'Foo': {
+                'type': 'object',
                 'properties': {
                     'd': {'type': 'string'}
                 }
-            }
+            },
+            'Bar': {'type': 'string', 'enum': ['A', 'B']}
         },
+        'type': 'object',
         'additionalProperties': False,
         'properties': {
             'a': {'type': 'integer'},
@@ -29,12 +32,25 @@ class Foo(SchemaBase):
         'definitions': Derived._json_schema['definitions']
     }
 
+class Bar(SchemaBase):
+    _json_schema = {
+        "$ref": "#/definitions/Bar",
+        'definitions': Derived._json_schema['definitions']
+    }
 
 class SimpleUnion(SchemaBase):
     _json_schema = {
         'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
     }
 
+class DefinitionUnion(SchemaBase):
+    _json_schema = {
+        "anyOf": [
+            {"$ref": "#/definitions/Foo"},
+            {"$ref": "#/definitions/Bar"}
+        ],
+        "definitions": Derived._json_schema['definitions']
+    }
 
 class SimpleArray(SchemaBase):
     _json_schema = {
@@ -120,6 +136,20 @@ def test_simple_type():
 def test_simple_array():
     assert SimpleArray([4, 5, 'six']).to_dict() == [4, 5, 'six']
     assert SimpleArray.from_dict(list('abc')).to_dict() == list('abc')
+
+
+def test_definition_union():
+    obj = DefinitionUnion.from_dict("A")
+    assert isinstance(obj, Bar)
+    assert obj.to_dict() == "A"
+
+    obj = DefinitionUnion.from_dict("B")
+    assert isinstance(obj, Bar)
+    assert obj.to_dict() == "B"
+
+    obj = DefinitionUnion.from_dict({'d': 'yo'})
+    assert isinstance(obj, Foo)
+    assert obj.to_dict() == {'d': 'yo'}
 
 
 def test_invalid_properties():

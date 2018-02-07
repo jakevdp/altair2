@@ -175,7 +175,7 @@ class SchemaBase(object):
         return result
 
     @classmethod
-    def _from_dict_union(cls, dct, validate=False):
+    def _from_dict_union(cls, dct):
         """from_dict for an anyOf or oneOf object"""
         schema = resolve_references(cls._json_schema)
         schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
@@ -184,7 +184,7 @@ class SchemaBase(object):
             if not matches:
                 continue
             try:
-                obj = matches[-1].from_dict(dct, validate=validate)
+                obj = matches[-1].from_dict(dct, validate=True)
             except TypeError:
                 continue
             except jsonschema.ValidationError:
@@ -242,7 +242,7 @@ class SchemaBase(object):
         schema = resolve_references(cls._json_schema)
 
         if 'anyOf' in schema or 'oneOf' in schema:
-            obj = cls._from_dict_union(dct, validate=False)
+            obj = cls._from_dict_union(dct)
             if obj is not None:
                 return obj
 
