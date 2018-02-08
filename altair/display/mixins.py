@@ -1,11 +1,8 @@
-from __future__ import absolute_import
-
 import json
 import uuid
 import pkgutil
 
 from IPython.display import display, publish_display_data
-
 
 
 class VegaDisplayMixin(object):
@@ -42,7 +39,8 @@ class VegaDisplayMixin(object):
             metadata={'jupyter-vega3': '#{0}'.format(id)}
         )
         publish_display_data(
-            {'application/javascript': self._generate_js(id, spec, render_type)},
+            {'application/javascript':
+                self._generate_js(id, spec, render_type)},
             metadata={'jupyter-vega3': '#{0}'.format(id)}
         )
 

@@ -1,9 +1,5 @@
-import cgi
-import codecs
-import collections
-import os.path
-
 import pandas as pd
+import numpy as np
 
 
 def sanitize_dataframe(df):
@@ -98,5 +94,6 @@ def prepare_vega_spec(spec, data=None):
         # compare a DataFrame to None.
         for key, value in data.items():
             data = sanitize_dataframe(value)
-            spec['data'].append({'name': key, 'values': data.to_dict(orient='records')})
+            spec['data'].append({
+                'name': key, 'values': data.to_dict(orient='records')})
     return spec
