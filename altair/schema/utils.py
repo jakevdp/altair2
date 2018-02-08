@@ -170,6 +170,10 @@ class SchemaInfo(object):
     def items(self):
         return self.schema.get('items', {})
 
+    @property
+    def enum(self):
+        return self.schema.get('enum', [])
+
     def is_empty(self):
         return set(self.schema.keys()) - set(EXCLUDE_KEYS) == {}
 

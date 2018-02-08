@@ -10,8 +10,10 @@ from altair.schema.utils import SchemaInfo
 FIELD_TEMPLATE = '''
 class {classname}(wrapper.{basename}):
     """{classname} channel"""
-    def __init__(self, field, type, *args, **kwargs):
-        super({classname}, self).__init__(field=field, type=type, *args, **kwargs)
+    def __init__(self, field, **kwargs):
+        kwds = parse_shorthand(field)
+        kwds.update(kwargs)
+        super({classname}, self).__init__(**kwds)
 '''
 
 VALUE_TEMPLATE = '''
@@ -23,7 +25,8 @@ class {classname}Value(wrapper.{basename}):
 
 def generate_channel_wrappers(schema, imports=None):
     if imports is None:
-            imports = ["from altair.schema import wrapper"]
+            imports = ["from altair.schema import wrapper",
+                       "from altair.utils import parse_shorthand"]
     contents = ["# The contents of this file are automatically generated",
                 "# at time {0}\n".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))]
     contents.extend(imports)

@@ -2,6 +2,7 @@
 Utility routines
 """
 import warnings
+import re
 
 import pandas as pd
 import numpy as np
@@ -10,6 +11,15 @@ try:
     from pandas.api.types import infer_dtype
 except ImportError: # Pandas before 0.20.0
     from pandas.lib import infer_dtype
+
+from .schema import utils, wrapper
+
+TYPECODE_MAP = {'ordinal': 'O',
+                'nominal': 'N',
+                'quantitative': 'Q',
+                'temporal': 'T'}
+
+INV_TYPECODE_MAP = {v: k for k, v in TYPECODE_MAP.items()}
 
 
 def infer_vegalite_type(data, field=None):
@@ -45,6 +55,111 @@ def infer_vegalite_type(data, field=None):
                       "Defaulting to nominal.".format(typ))
         return 'nominal'
 
+
+def parse_shorthand(shorthand):
+    """
+    Parse the shorthand expression for aggregation, field, and type.
+
+    Parameters
+    ----------
+    shorthand: str
+        Shorthand string of the form "agg(col):typ"
+
+    Returns
+    -------
+    D : dict
+        Dictionary which always contains a 'field' key, and additionally
+        contains an 'aggregate' and 'type' key depending on the input.
+
+    Examples
+    --------
+    >>> parse_shorthand('col')
+    {'field': 'col'}
+
+    >>> parse_shorthand('col:Q')
+    {'field': 'col', 'type': 'quantitative'}
+
+    >>> parse_shorthand('col:quantitative')
+    {'field': 'col', 'type': 'quantitative'}
+
+    >>> parse_shorthand('sum(col)')
+    {'aggregate': 'sum', 'field': 'col'}
+
+    >>> parse_shorthand('sum(col):Q')
+    {'aggregate': 'sum', 'field': 'col', 'type': 'quantitative'}
+    """
+    if not shorthand:
+        return {}
+
+    # Must import this here to avoid circular imports
+    valid_aggregates = utils.SchemaInfo(wrapper.AggregateOp).enum
+    valid_typecodes = list(TYPECODE_MAP) + list(INV_TYPECODE_MAP)
+
+    # build regular expressions
+    units = dict(field='(?P<field>.*)',
+                 type='(?P<type>{0})'.format('|'.join(valid_typecodes)),
+                 aggregate='(?P<aggregate>{0})'.format('|'.join(valid_aggregates)))
+    patterns = [r'{field}',
+                r'{field}:{type}',
+                r'{aggregate}\({field}\)',
+                r'{aggregate}\({field}\):{type}']
+    regexps = (re.compile('\A' + p.format(**units) + '\Z', re.DOTALL)
+               for p in patterns[::-1])
+
+    # find matches depending on valid fields passed
+    match = next(exp.match(shorthand).groupdict() for exp in regexps
+                 if exp.match(shorthand))
+
+    # Use short form of the type expression
+    typ = match.get('type', None)
+    if typ:
+        match['type'] = INV_TYPECODE_MAP.get(typ, typ)
+    return match
+
+
+def parse_shorthand_plus_data(shorthand, data):
+    """Parse a field shorthand, and use data to infer type if not specified
+
+    Parameters
+    ----------
+    shorthand: str
+        Shorthand string of the form "agg(col):typ"
+    data : pd.DataFrame
+        Dataframe from which to infer types
+
+    Returns
+    -------
+    D : dict
+        Dictionary which always contains a 'field' key, and additionally
+        contains an 'aggregate' and 'type' key depending on the input.
+
+    Examples
+    --------
+    >>> data = pd.DataFrame({'foo': ['A', 'B', 'A', 'B'],
+    ...                      'bar': [1, 2, 3, 4]})
+    ...
+
+    >>> parse_shorthand_plus_data('foo', data)
+    {'field': 'foo', 'type': 'nominal'}
+
+    >>> parse_shorthand_plus_data('bar', data)
+    {'field': 'bar', 'type': 'quantitative'}
+
+    >>> parse_shorthand_plus_data('bar:O', data)
+    {'field': 'bar', 'type': 'ordinal'}
+
+    >>> parse_shorthand_plus_data('sum(bar)', data)
+    {'aggregate': 'sum', 'field': 'bar', 'type': 'quantitative'}
+    """
+    attrs = parse_shorthand(shorthand)
+    if 'type' not in attrs:
+        field = attrs['field']
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError("type must be specified unless data is provided "
+                             "in the form of a dataframe")
+        col = data[field]
+        attrs['type'] = infer_vegalite_type(col)
+    return attrs
 
 def sanitize_dataframe(df):
     """Sanitize a DataFrame to prepare it for serialization.

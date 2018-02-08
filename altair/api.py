@@ -3,7 +3,7 @@ import six
 import pandas as pd
 
 from .schema import wrapper, channels, Undefined
-from .utils import sanitize_dataframe, infer_vegalite_type
+from .utils import sanitize_dataframe, infer_vegalite_type, parse_shorthand_plus_data
 
 
 class TopLevelMixin(object):
@@ -41,6 +41,17 @@ class TopLevelMixin(object):
         """
         from IPython.display import display
         display(self)
+
+    # TODO: handle data correctly...
+
+    def __add__(self, other):
+        return LayerChart([self, other])
+
+    def __sub__(self, other):
+        return VConcatChart([self, other])
+
+    def __or__(self, other):
+        return HConcatChart([self, other    ])
 
 
 class Chart(TopLevelMixin, wrapper.TopLevelFacetedUnitSpec):
@@ -116,10 +127,9 @@ class Chart(TopLevelMixin, wrapper.TopLevelFacetedUnitSpec):
             raise NotImplementedError()
         for prop, field in list(kwargs.items()):
             if isinstance(field, six.string_types):
-                col = self.data[field]
-                type = infer_vegalite_type(col)
-                cls = getattr(channels, prop.title())
-                kwargs[prop] = cls(field=field, type=type)
+                attrs = parse_shorthand_plus_data(field, self.data)
+                cls = getattr(channels, prop.title())   
+                kwargs[prop] = cls(**attrs)
         # TODO: don't overwrite old encodings?
         self.encoding = wrapper.EncodingWithFacet(*args, **kwargs)
         return self
