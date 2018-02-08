@@ -7,11 +7,9 @@ class VegaLite(VegaDisplayMixin):
         self.spec = spec
         self.data = data
 
-    def _get_spec_and_data(self):
-        return (self.spec, self.data, 'vega-lite')
-
-    def _prepare_spec(self, spec, data):
-        return utils.prepare_vegalite_spec(spec, data)
+    def _get_spec_info(self):
+        spec = utils.prepare_vegalite_spec(self.spec, self.data)
+        return (spec, 'vega-lite')
 
 
 class Vega(VegaDisplayMixin):
@@ -19,8 +17,6 @@ class Vega(VegaDisplayMixin):
         self.spec = spec
         self.data = data
 
-    def _get_spec_and_data(self):
-        return (self.spec, self.data, 'vega-lite')
-
-    def _prepare_spec(self, spec, data):
-        return utils.prepare_vega_spec(spec, data)
+    def _get_spec_info(self):
+        spec = utils.prepare_vega_spec(self.spec, self.data)
+        return (spec, 'vega')

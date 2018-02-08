@@ -8,8 +8,8 @@ from .display import VegaDisplayMixin
 
 
 class TopLevelMixin(VegaDisplayMixin):
-    def _get_spec_and_data(self):
-        return (self.to_dict(), None, 'vega-lite')
+    def _get_spec_info(self):
+        return (self.to_dict(), 'vega-lite')
 
     def _convert_data(self):
         if isinstance(self.data, six.string_types):
