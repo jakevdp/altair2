@@ -4,9 +4,13 @@ import pandas as pd
 
 from .schema import wrapper, channels, Undefined
 from .utils import sanitize_dataframe, infer_vegalite_type, parse_shorthand_plus_data
+from .display import VegaDisplayMixin
 
 
-class TopLevelMixin(object):
+class TopLevelMixin(VegaDisplayMixin):
+    def _get_spec_and_data(self):
+        return (self.to_dict(), None, 'vega-lite')
+
     def _convert_data(self):
         if isinstance(self.data, six.string_types):
             # TODO: rewrite URLs for Vega/Vega-Lite examples?
@@ -25,24 +29,6 @@ class TopLevelMixin(object):
     def to_dict(self, *args, **kwargs):
         self._convert_data()
         return super(TopLevelMixin, self).to_dict(*args, **kwargs)
-
-    def _ipython_display_(self):
-        """Use the vega package to display in the classic Jupyter Notebook."""
-        from IPython.display import display
-        from vega3 import VegaLite
-        display(VegaLite(self.to_dict(validate=True)))
-
-    def display(self):
-        """Display the Chart using the Jupyter Notebook's rich output.
-        To use this in the classic Jupyter Notebook, the ``ipyvega`` package
-        must be installed.
-        To use this in JupyterLab/nteract, run the ``enable_mime_rendering``
-        function first.
-        """
-        from IPython.display import display
-        display(self)
-
-    # TODO: handle data correctly...
 
     def __add__(self, other):
         return LayerChart([self, other])
@@ -128,7 +114,7 @@ class Chart(TopLevelMixin, wrapper.TopLevelFacetedUnitSpec):
         for prop, field in list(kwargs.items()):
             if isinstance(field, six.string_types):
                 attrs = parse_shorthand_plus_data(field, self.data)
-                cls = getattr(channels, prop.title())   
+                cls = getattr(channels, prop.title())
                 kwargs[prop] = cls(**attrs)
         # TODO: don't overwrite old encodings?
         self.encoding = wrapper.EncodingWithFacet(*args, **kwargs)
