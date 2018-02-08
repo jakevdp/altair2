@@ -142,7 +142,7 @@ class SchemaBase(object):
         """return a dicitionary of attributes to values"""
         return {attr: getattr(self, attr) for attr in self.__attrs()}
 
-    def to_dict(self, validate=True):
+    def to_dict(self, validate=True, **kwds):
         """Return a dictionary representation of the object
 
         Parameters
@@ -167,12 +167,16 @@ class SchemaBase(object):
             if isinstance(val, SchemaBase):
                 # only validate at the top level
                 return val.to_dict(validate=False)
+            elif isinstance(val, list):
+                return [_todict(v) for v in val]
+            elif isinstance(val, dict):
+                return {k: _todict(v) for k, v in val.items()}
             else:
                 return val
 
         dct = {rmap_.get(attr, attr): _todict(v)
                for attr, v in self.__attr_dict().items()
-               if v is not Undefined}
+               if v is not Undefined and kwds.get(attr, True)}
         val = self._simple_schema_value
 
         if val is not Undefined and len(dct) > 0:
@@ -180,7 +184,7 @@ class SchemaBase(object):
                              "cannot serialize to dict")
 
         if val is Undefined:
-            result = dct
+            result = _todict(dct)
         elif type(val) is dict:
             result = {attr: _todict(v) for attr, v in val.items()}
         elif type(val) is list:

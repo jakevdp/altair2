@@ -80,17 +80,21 @@ def get_valid_identifier(prop, replacement_character='', allow_unicode=False):
 
 
 class SchemaProperties(object):
-    def __init__(self, properties):
+    def __init__(self, properties, schema):
         self.__properties = properties
+        self.__schema = schema
 
     def __dir__(self):
         return list(self.__properties.keys())
 
     def __getattr__(self, attr):
-        return SchemaInfo(self.__properties[attr])
+        return self[attr]
 
     def __getitem__(self, attr):
-        return SchemaInfo(self.__properties[attr])
+        dct = self.__properties[attr]
+        if 'definitions' in self.__schema and 'definitions' not in dct:
+            dct = dict(definitions=self.__schema['definitions'], **dct)
+        return SchemaInfo(dct)
 
     def __iter__(self):
         return iter(self.__properties)
@@ -128,11 +132,11 @@ class SchemaInfo(object):
 
     @property
     def properties(self):
-        return SchemaProperties(self.schema.get('properties', {}))
+        return SchemaProperties(self.schema.get('properties', {}), self.schema)
 
     @property
     def definitions(self):
-        return SchemaProperties(self.schema.get('definitions', {}))
+        return SchemaProperties(self.schema.get('definitions', {}), self.schema)
 
     @property
     def required(self):
@@ -149,6 +153,22 @@ class SchemaInfo(object):
     @property
     def type(self):
         return self.schema.get('type', None)
+
+    @property
+    def anyOf(self):
+        return self.schema.get('anyOf', [])
+
+    @property
+    def oneOf(self):
+        return self.schema.get('oneOf', [])
+
+    @property
+    def allOf(self):
+        return self.schema.get('allOf', [])
+
+    @property
+    def items(self):
+        return self.schema.get('items', {})
 
     def is_empty(self):
         return set(self.schema.keys()) - set(EXCLUDE_KEYS) == {}

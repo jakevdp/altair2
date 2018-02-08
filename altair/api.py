@@ -45,7 +45,7 @@ class TopLevelMixin(object):
 
 class Chart(TopLevelMixin, wrapper.TopLevelFacetedUnitSpec):
     def __init__(self, data=Undefined, encoding=Undefined, mark=Undefined,
-                 width=600, height=450, **kwargs):
+                 width=400, height=300, **kwargs):
         super(Chart, self).__init__(data=data, encoding=encoding, mark=mark,
                                     width=width, height=height, **kwargs)
 
@@ -128,3 +128,18 @@ class Chart(TopLevelMixin, wrapper.TopLevelFacetedUnitSpec):
         """Make chart axes interactive"""
         self.selection = {'grid': {'bind': 'scales', 'type': 'interval'}}
         return self
+
+
+class HConcatChart(TopLevelMixin, wrapper.TopLevelHConcatSpec):
+    def __init__(self, hconcat, **kwargs):
+        super(HConcatChart, self).__init__(hconcat=hconcat, **kwargs)
+
+
+class VConcatChart(TopLevelMixin, wrapper.TopLevelVConcatSpec):
+    def __init__(self, vconcat, **kwargs):
+        super(VConcatChart, self).__init__(vconcat=vconcat, **kwargs)
+
+
+class LayerChart(TopLevelMixin, wrapper.TopLevelLayerSpec):
+    def __init__(self, layer, **kwargs):
+        super(LayerChart, self).__init__(layer=layer, **kwargs)
