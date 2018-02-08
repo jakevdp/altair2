@@ -125,5 +125,6 @@ class Chart(TopLevelMixin, wrapper.TopLevelFacetedUnitSpec):
         return self
 
     def interactive(self):
+        """Make chart axes interactive"""
         self.selection = {'grid': {'bind': 'scales', 'type': 'interval'}}
         return self

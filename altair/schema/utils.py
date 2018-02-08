@@ -79,24 +79,76 @@ def get_valid_identifier(prop, replacement_character='', allow_unicode=False):
     return valid
 
 
+class SchemaProperties(object):
+    def __init__(self, properties):
+        self.__properties = properties
+
+    def __dir__(self):
+        return list(self.__properties.keys())
+
+    def __getattr__(self, attr):
+        return SchemaInfo(self.__properties[attr])
+
+    def __getitem__(self, attr):
+        return SchemaInfo(self.__properties[attr])
+
+    def __iter__(self):
+        return iter(self.__properties)
+
+    def items(self):
+        return self.__properties.items()
+
+    def keys(self):
+        return self.__properties.keys()
+
+    def values():
+        return self.__properties.values()
+
+
 class SchemaInfo(object):
-    _defaults = {'properties': {},
-                 'required': [],
-                 'patternProperties': {},
-                 'additionalProperties': True,
-                 'type': None}
     def __init__(self, schema):
         if hasattr(schema, '_json_schema'):
             schema = schema._json_schema
         self.raw_schema = schema
         self.schema = resolve_references(schema)
-        for key, default in self._defaults.items():
-            setattr(self, key, self.schema.get(key, default))
+
+    def __repr__(self):
+        keys = []
+        for key in sorted(self.schema.keys()):
+            val = self.schema[key]
+            rval = repr(val).replace('\n', '')
+            if len(rval) > 30:
+                rval = rval[:30] + '...'
+            if key == 'definitions':
+                rval = "{...}"
+            elif key == 'properties':
+                rval = '{\n    ' + '\n    '.join(sorted(map(repr, val))) + '\n  }'
+            keys.append('"{0}": {1}'.format(key, rval))
+        return "SchemaInfo({\n  " + '\n  '.join(keys) + "\n})"
 
     @property
-    def schema_nodefs(self):
-        return {key: val for key, val in self.schema.items()
-                if key != 'definitions'}
+    def properties(self):
+        return SchemaProperties(self.schema.get('properties', {}))
+
+    @property
+    def definitions(self):
+        return SchemaProperties(self.schema.get('definitions', {}))
+
+    @property
+    def required(self):
+        return self.schema.get('required', [])
+
+    @property
+    def patternProperties(self):
+        return self.schema.get('patternProperties', {})
+
+    @property
+    def additionalProperties(self):
+        return self.schema.get('additionalProperties', True)
+
+    @property
+    def type(self):
+        return self.schema.get('type', None)
 
     def is_empty(self):
         return set(self.schema.keys()) - set(EXCLUDE_KEYS) == {}
@@ -120,7 +172,7 @@ class SchemaInfo(object):
     def is_array(self):
         return (self.type == 'array')
 
-    def type(self):
+    def schema_type(self):
         if self.is_empty():
             return 'empty'
         elif self.is_compound():
