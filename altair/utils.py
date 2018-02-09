@@ -209,3 +209,20 @@ def sanitize_dataframe(df):
             col = df[col_name].apply(to_list_if_array, convert_dtype=False)
             df[col_name] = col.where(col.notnull(), None)
     return df
+
+
+def use_signature(Obj):
+    """Apply call signature and documentation of Obj to the decorated method"""
+    def decorate(f):
+        # call-signature of f is exposed via __wrapped__.
+        # we want it to mimic Obj.__init__
+        f.__wrapped__ = Obj.__init__
+        f._uses_signature = Obj
+
+        # Supplement the docstring of f with information from Obj
+        doclines = Obj.__doc__.splitlines()
+        if not f.__doc__:
+            f.__doc__ = ""
+        f.__doc__ += '\n'.join(doclines[1:])
+        return f
+    return decorate

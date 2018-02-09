@@ -3,6 +3,7 @@
 import keyword
 import json
 import re
+import textwrap
 
 
 EXCLUDE_KEYS = ('definitions', 'title', 'description', '$schema', 'id')
@@ -77,6 +78,26 @@ def get_valid_identifier(prop, replacement_character='', allow_unicode=False):
     if keyword.iskeyword(valid):
         valid += '_'
     return valid
+
+
+def indent_function_args(funcname, arglist, indent=0, width=100):
+    initial_indent = subsequent_indent = (len(funcname) + indent + 1) * ' '
+    wrapper = textwrap.TextWrapper(width=width,
+                                   initial_indent=initial_indent,
+                                   subsequent_indent=subsequent_indent,
+                                   break_long_words=False)
+    return '{0}({1})'.format(funcname,
+                             '\n'.join(wrapper.wrap(', '.join(arglist))))
+
+
+
+def indent_line(line, initial_indent=0, width=120, initial_width=120,
+                subsequent_indent=4):
+    wrapper = textwrap.TextWrapper(width=width,
+                                   initial_indent=(width - initial_width)* ' ',
+                                   subsequent_indent=subsequent_indent * ' ',
+                                   break_long_words=False)
+    return '\n'.join(wrapper.wrap(line)).lstrip()
 
 
 class SchemaProperties(object):
@@ -225,11 +246,13 @@ class SchemaInfo(object):
     def init_code(self, classname, indent=4):
         """Return code suitable for the __init__ function of a Schema class"""
 
+        args = ['self']
+
         if self.is_empty() or self.is_compound():
-            args = ['*args', '**kwds']
+            args += ['*args', '**kwds']
             super_args = ['*args', '**kwds']
         elif self.is_value():
-            args = ['*args']
+            args += ['*args']
             super_args = ['*args']
         else:
             map_ = self.property_name_map()
@@ -237,8 +260,8 @@ class SchemaInfo(object):
             properties = {map_.get(p, p) for p in self.properties} - required
             extra_args = (self.additionalProperties != False)
 
-            args = sorted(required) + ['{0}=Undefined'.format(prop)
-                                       for prop in sorted(properties)]
+            args += sorted(required) + ['{0}=Undefined'.format(prop)
+                                        for prop in sorted(properties)]
             super_args = ['{0}={0}'.format(prop)
                           for prop in (sorted(required) + sorted(properties))]
             if extra_args:
@@ -247,8 +270,9 @@ class SchemaInfo(object):
 
         signature = ("def __init__({args}):\n" + (indent * ' ') +
                      "super({classname}, self).__init__({super_args})")
+        # TODO: wrap arguments at 80 chars
         return signature.format(classname=classname,
-                                args=', '.join(['self'] + args),
+                                args=', '.join(args),
                                 super_args=', '.join(super_args))
 
     def docstring(self, classname):
