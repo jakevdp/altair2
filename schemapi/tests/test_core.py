@@ -101,7 +101,7 @@ def test_schema_cases():
         # Foo.d needs to be a string
         Derived(c=Foo(4)).to_dict()
 
-    with pytest.raises(TypeError):
+    with pytest.raises(jsonschema.ValidationError):
         # no additional properties allowed
         Derived(foo='bar').to_dict()
 

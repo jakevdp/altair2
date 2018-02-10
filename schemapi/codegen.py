@@ -78,7 +78,7 @@ def init_code(classname, schema, indent=0):
         args.extend('{0}=Undefined'.format(p) for p in sorted(props))
         args.append('**kwds')
 
-        sorted_args.extend('{0}={0}'.format(p) for p in sorted(required))
+        super_args.extend('{0}={0}'.format(p) for p in sorted(required))
         super_args.extend('{0}={0}'.format(p) for p in sorted(props))
         super_args.append('**kwds')
     else:

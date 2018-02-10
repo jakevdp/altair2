@@ -8,6 +8,7 @@ import warnings
 import jsonschema
 
 from .utils import hash_schema, SchemaInfo, resolve_references
+from . import codegen
 
 
 class UndefinedType(object):
@@ -56,14 +57,14 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
         schema = SchemaInfo(getattr(cls, schema_name, {}))
 
         if init_func and '__init__' not in cls.__dict__:
-            init_code = schema.init_code(name)
+            init_code = codegen.init_code(name, schema.schema)
             globals_ = {name: cls, 'Undefined': Undefined}
             locals_ = {}
             exec(init_code, globals_, locals_)
             setattr(cls, '__init__', locals_['__init__'])
 
         if docstring and not cls.__doc__:
-            setattr(cls, '__doc__', schema.docstring(name, repr=False))
+            setattr(cls, '__doc__', codegen.docstring(name, schema.schema))
         return cls
 
     if len(args) == 0:
@@ -216,6 +217,7 @@ class FromDict(object):
         return schema
 
     def from_dict(self, schemacls, dct, validate=True):
+        # TODO: change this to take schema rather than schemacls & use below
         # TODO: implement additionalProperties & patternProperties
         if validate:
             jsonschema.validate(dct, self._get_schema(schemacls))
@@ -243,6 +245,7 @@ class FromDict(object):
             if not matches:
                 continue
             try:
+                # TODO: call self.from_dict instead
                 obj = matches[-1].from_dict(dct, validate=True)
             except TypeError:
                 continue
@@ -267,5 +270,14 @@ class FromDict(object):
         return schemacls(**kwds)
 
     def _from_dict_list(self, schemacls, dct, validate=False):
-        # TODO: find wrapper class for elements in items
-        return schemacls(dct)
+        schema = self._get_schema(schemacls, resolve_refs=True)
+        if 'items' in schema:
+            hash_ = hash_schema(schema['items'])
+            wrapper = self.class_dict[hash_]
+        else:
+            wrapper = []
+
+        if wrapper:
+            return schemacls([wrapper[-1].from_dict(val) for val in dct])
+        else:
+            return schemacls(dct)
