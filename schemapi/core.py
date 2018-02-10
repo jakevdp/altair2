@@ -70,7 +70,7 @@ class SchemaBase(object):
         """
         return getattr(self, '_{0}__schema'.format(self.__class__.__name__), {})
 
-    def to_dict(self, validate=True, **kwds):
+    def to_dict(self, validate=True, context={}, ignore=[]):
         """Return a dictionary representation of the object
 
         Parameters
@@ -78,7 +78,12 @@ class SchemaBase(object):
         validate : boolean
             If True (default), then validate the output dictionary
             against the schema.
-
+        context : dict (optional)
+            A context dictionary that will be passed to all child to_dict
+            function calls
+        ignore : list
+            A list of keys to ignore. This will *not* passed to child to_dict
+            function calls.
         Returns
         -------
         dct : dictionary
@@ -89,31 +94,27 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and the dict does not conform to the schema
         """
+
         def _todict(val):
             if isinstance(val, SchemaBase):
                 # only validate at the top level
-                return val.to_dict(validate=False)
+                return val.to_dict(validate=False, context=context)
             elif isinstance(val, list):
                 return [_todict(v) for v in val]
             elif isinstance(val, dict):
-                return {k: _todict(v) for k, v in val.items()}
+                return {k: _todict(v) for k, v in val.items()
+                        if v is not Undefined}
             else:
                 return val
 
-        dct = {attr: _todict(v)
-               for attr, v in self.__kwds.items()
-               if v is not Undefined and kwds.get(attr, True)}
-        val = self.__args
-
-        if val and len(dct) > 0:
+        if self.__args and not self.__kwds:
+            result = _todict(self.__args[0])
+        elif self.__kwds and not self.__args:
+            result = _todict({k: v for k, v in self.__kwds.items()
+                              if k not in ignore})
+        else:
             raise ValueError("{0} instance has both a value and properties : "
                              "cannot serialize to dict")
-
-        if val:
-            result = _todict(val[0])
-        else:
-            result = _todict(dct)
-
         if validate:
             jsonschema.validate(result, self.__get_schema())
         return result
