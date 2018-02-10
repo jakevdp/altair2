@@ -55,14 +55,14 @@ class SchemaBase(object):
         val = self.__args
         dct = self.__kwds
         if dct:
-            args = ("{0!r}: {1!r}".format(key, val)
+            args = ("{0}: {1!r}".format(key, val)
                     for key, val in dct.items()
                     if val is not Undefined)
             args = '\n' + ',\n'.join(args)
             args = args.replace('\n', '\n  ')
-            return "{0}(**{{{1}\n}})".format(self.__class__.__name__, args)
+            return "<{0} {{{1}\n}}>".format(self.__class__.__name__, args)
         else:
-            return "{0}({1})".format(self.__class__.__name__, val[0])
+            return "<{0}({1})>".format(self.__class__.__name__, val[0])
 
     def __get_schema(self):
         """
@@ -140,12 +140,14 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and dct does not conform to the schema
         """
-        converter = FromDict(SchemaBase.__subclasses__())
+        converter = _FromDict(SchemaBase.__subclasses__())
         return converter.from_dict(cls, dct, validate=validate)
 
 
-class FromDict(object):
+class _FromDict(object):
     def __init__(self, class_list):
+        # Create a mapping of a schema hash to a list of matching classes
+        # This lets us quickly determine the correct class to construct
         self.class_dict = collections.defaultdict(list)
         for cls in class_list:
             self.class_dict[hash_schema(self._get_schema(cls))].append(cls)
@@ -157,68 +159,46 @@ class FromDict(object):
             schema = resolve_references(schema)
         return schema
 
-    def from_dict(self, schemacls, dct, validate=True):
-        # TODO: change this to take schema rather than schemacls & use below
+    def from_dict(self, cls, dct, validate=True):
         # TODO: implement additionalProperties & patternProperties
+        # TODO: do something more than simply selecting the last match?
+        schema = self._get_schema(cls)
         if validate:
-            jsonschema.validate(dct, self._get_schema(schemacls))
-
-        schema = self._get_schema(schemacls, resolve_refs=True)
+            jsonschema.validate(dct, self._get_schema(cls))
+        schema = resolve_references(schema)
 
         if 'anyOf' in schema or 'oneOf' in schema:
-            obj = self._from_dict_union(schemacls, dct)
-            if obj is not None:
-                return obj
+            schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
+            for schema in schemas:
+                # TODO: in the no-match case, call from_dict on dict/list contents
+                matches = self.class_dict[hash_schema(schema)]
+                if not matches:
+                    continue
+                try:
+                    return self.from_dict(matches[-1], dct, validate=True)
+                except TypeError:
+                    continue
+                except jsonschema.ValidationError:
+                    continue
 
         if isinstance(dct, dict):
-            return self._from_dict_object(schemacls, dct)
+            props = schema.get('properties', {})
+            hashes = {prop: hash_schema(val) for prop, val in props.items()}
+            matches = {prop: self.class_dict[hash_] for prop, hash_ in hashes.items()}
+            wrappers = {prop: match[-1] for prop, match in matches.items() if match}
+            kwds = {key: (self.from_dict(wrappers[key], val, validate=False)
+                          if key in wrappers else val)
+                    for key, val in dct.items()}
+            return cls(**kwds)
         elif isinstance(dct, list):
-            return self._from_dict_list(schemacls, dct)
-        else:
-            return schemacls(dct)
-
-    def _from_dict_union(self, schemacls, dct):
-        schema = self._get_schema(schemacls, resolve_refs=True)
-        schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
-        for schema in schemas:
-            # TODO: in the no-match case, call from_dict on dict/list contents
-            matches = self.class_dict[hash_schema(schema)]
-            if not matches:
-                continue
-            try:
-                # TODO: call self.from_dict instead
-                obj = matches[-1].from_dict(dct, validate=True)
-            except TypeError:
-                continue
-            except jsonschema.ValidationError:
-                continue
+            if 'items' in schema:
+                hash_ = hash_schema(schema['items'])
+                wrapper = self.class_dict[hash_]
             else:
-                return obj
-        return None
+                wrapper = []
 
-    def _from_dict_object(self, schemacls, dct, validate=False):
-        schema = self._get_schema(schemacls, resolve_refs=True)
-        props = schema.get('properties', {})
-        hashes = {prop: hash_schema(val) for prop, val in props.items()}
-        matches = {prop: self.class_dict[hash_]
-                   for prop, hash_ in hashes.items()
-                   if hash_ in self.class_dict}
-        # TODO: do something more than simply selecting the last match?
-        wrappers = {prop: match[-1] for prop, match in matches.items()}
-        kwds = {key: (wrappers[key].from_dict(val, validate=validate)
-                      if key in wrappers else val)
-                for key, val in dct.items()}
-        return schemacls(**kwds)
+            if wrapper:
+                return cls([self.from_dict(wrapper[-1], val, validate=False)
+                            for val in dct])
 
-    def _from_dict_list(self, schemacls, dct, validate=False):
-        schema = self._get_schema(schemacls, resolve_refs=True)
-        if 'items' in schema:
-            hash_ = hash_schema(schema['items'])
-            wrapper = self.class_dict[hash_]
-        else:
-            wrapper = []
-
-        if wrapper:
-            return schemacls([wrapper[-1].from_dict(val) for val in dct])
-        else:
-            return schemacls(dct)
+        return cls(dct)
