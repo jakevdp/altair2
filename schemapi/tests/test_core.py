@@ -2,7 +2,7 @@ import jsonschema
 import pytest
 
 from .. import SchemaBase, schemaclass, Undefined
-from ..core import hash_schema, UndefinedType
+from ..core import UndefinedType
 
 
 @schemaclass

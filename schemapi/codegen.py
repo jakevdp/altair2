@@ -10,6 +10,7 @@ class CodeSnippet(object):
     def __repr__(self):
         return self.code
 
+
 SCHEMA_CLASS_TEMPLATE = '''
 class {classname}({basename}):
     """{docstring}"""
@@ -74,12 +75,12 @@ def init_code(classname, schema, indent=0):
         props = {p for p in info.properties if is_valid_identifier(p)}
         props -= required
 
-        args.extend('{0}=Undefined'.format(p) for p in sorted(required))
-        args.extend('{0}=Undefined'.format(p) for p in sorted(props))
+        args.extend('{0}=Undefined'.format(p)
+                    for p in sorted(required) + sorted(props))
         args.append('**kwds')
 
-        super_args.extend('{0}={0}'.format(p) for p in sorted(required))
-        super_args.extend('{0}={0}'.format(p) for p in sorted(props))
+        super_args.extend('{0}={0}'.format(p)
+                          for p in sorted(required) + sorted(props))
         super_args.append('**kwds')
     else:
         raise ValueError("Schema object not understood")

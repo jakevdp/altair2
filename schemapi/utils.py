@@ -141,7 +141,7 @@ class SchemaProperties(object):
     def keys(self):
         return self.__properties.keys()
 
-    def values():
+    def values(self):
         return self.__properties.values()
 
 
