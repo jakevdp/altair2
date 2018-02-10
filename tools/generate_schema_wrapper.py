@@ -12,8 +12,7 @@ from altair.schema.utils import get_valid_identifier, SchemaInfo
 CLASS_TEMPLATE = '''
 class {classname}({basename}):
     {docstring}
-    _valid_attr_map = {attrmap}
-    _json_schema = {schema}
+    __schema = {schema}
     {initfunc}
 '''
 
@@ -56,7 +55,7 @@ def generate_schema_wrapper(schema, imports=None):
         defschema = {'$ref': '#/definitions/' + name,
                      'definitions': schema['definitions']}
         code_defschema = {'$ref': '#/definitions/' + name,
-                          'definitions': CodeSnippet("Root._json_schema['definitions']")}
+                          'definitions': CodeSnippet("Root._Root__schema['definitions']")}
 
         contents.append(_schema_class(pyname, defschema, code_defschema))
     contents.append('')  # end with newline

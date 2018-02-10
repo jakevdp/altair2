@@ -3,7 +3,7 @@ import inspect
 import json
 import keyword
 import re
-from functools import wraps
+import warnings
 
 import jsonschema
 
@@ -31,7 +31,6 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
 
     - An __init__ function
     - a __doc__ docstring
-    - an _valid_attr_map that maps property names to valid Python identifiers
 
     In all cases, if the attribute/method is explicitly defined in the class
     it will not be overwritten.
@@ -40,20 +39,21 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
 
         @schemaclass
         class MySchema(SchemaBase):
-            _json_schema = {...}
+            __schema = {...}
 
     Optionally, you can invoke schemaclass with arguments to turn off
     some of the added behaviors:
 
-        @schemaclass(init_func=True, docstring=False, property_map=True)
+        @schemaclass(init_func=True, docstring=False)
         class MySchema(SchemaBase):
-            _json_schema = {...}
+            __schema = {...}
     """
-    def _decorator(cls, init_func=init_func, docstring=docstring,
-                   property_map=property_map):
+    def _decorator(cls, init_func=init_func, docstring=docstring):
+        if not isinstance(cls, SchemaBase):
+            warnings.warn("class is not an instance of SchemaBase.")
+
         name = cls.__name__
         schema_name = '_{0}__schema'.format(name)
-        attr_map_name = '_{0}__valid_attr_map'.format(name)
         schema = SchemaInfo(getattr(cls, schema_name, {}))
 
         if init_func and '__init__' not in cls.__dict__:
@@ -63,11 +63,8 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
             exec(init_code, globals_, locals_)
             setattr(cls, '__init__', locals_['__init__'])
 
-        if property_map and attr_map_name not in cls.__dict__:
-            setattr(cls, attr_map_name, schema.property_name_map())
-
-        if docstring and '__doc__' not in cls.__dict__:
-            setattr(cls, '__doc__', schema.docstring(name))
+        if docstring and not cls.__doc__:
+            setattr(cls, '__doc__', schema.docstring(name, repr=False))
         return cls
 
     if len(args) == 0:
@@ -117,12 +114,12 @@ class SchemaBase(object):
         val = self.__args
         dct = self.__kwds
         if dct:
-            args = ("{0}={1}".format(key, repr(val))
+            args = ("{0!r}: {1!r}".format(key, val)
                     for key, val in dct.items()
                     if val is not Undefined)
             args = '\n' + ',\n'.join(args)
             args = args.replace('\n', '\n  ')
-            return "{0}({1}\n)".format(self.__class__.__name__, args)
+            return "{0}(**{{{1}\n}})".format(self.__class__.__name__, args)
         else:
             return "{0}({1})".format(self.__class__.__name__, val[0])
 

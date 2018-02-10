@@ -1,5 +1,5 @@
 # The contents of this file are automatically generated
-# at time 2018-02-08 07:05:35
+# at time 2018-02-09 12:32:46
 
 from altair.schema import wrapper
 from altair.utils import parse_shorthand

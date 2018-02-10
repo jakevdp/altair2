@@ -308,9 +308,15 @@ class SchemaInfo(object):
             code.append("")
         code.append("super({0}, self).__init__({1})".format(classname, ', '.join(super_args)))
 
+        print(('\n' + indent * ' ').join(code))
+
         # TODO: wrap arguments at 80 chars
         return ('\n' + indent * ' ').join(code)
 
-    def docstring(self, classname):
+    def docstring(self, classname, repr=True):
         # TODO: more useful doc string
-        return '"""A {classname} json schema wrapper"""'.format(classname=classname)
+        doc = '"""A {classname} json schema wrapper"""'.format(classname=classname)
+        if repr:
+            return doc
+        else:
+            return eval(doc)
