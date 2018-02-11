@@ -31,7 +31,7 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
             __schema = {...}
     """
     def _decorator(cls, init_func=init_func, docstring=docstring):
-        if not isinstance(cls, SchemaBase):
+        if not issubclass(cls, SchemaBase):
             warnings.warn("class is not an instance of SchemaBase.")
 
         name = cls.__name__
