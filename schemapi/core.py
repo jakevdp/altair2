@@ -1,8 +1,9 @@
 import collections
+import json
 
 import jsonschema
 
-from .utils import hash_schema, resolve_references
+from .utils import resolve_references
 
 
 class UndefinedType(object):
@@ -70,7 +71,7 @@ class SchemaBase(object):
         """
         return getattr(self, '_{0}__schema'.format(self.__class__.__name__), {})
 
-    def to_dict(self, validate=True, context={}, ignore=[]):
+    def to_dict(self, validate=True, ignore=[], context={}):
         """Return a dictionary representation of the object
 
         Parameters
@@ -78,12 +79,13 @@ class SchemaBase(object):
         validate : boolean
             If True (default), then validate the output dictionary
             against the schema.
-        context : dict (optional)
-            A context dictionary that will be passed to all child to_dict
-            function calls
         ignore : list
             A list of keys to ignore. This will *not* passed to child to_dict
             function calls.
+        context : dict (optional)
+            A context dictionary that will be passed to all child to_dict
+            function calls
+
         Returns
         -------
         dct : dictionary
@@ -146,12 +148,61 @@ class SchemaBase(object):
 
 
 class _FromDict(object):
+    """Class used to construct SchemaBase class hierarchies from a dict
+
+    The primary purpose of using this class is to be able to build a hash table
+    that maps schemas to their wrapper classes. The candidate classes are
+    specified in the ``class_list`` argument to the constructor.
+    """
+    _hash_exclude_keys = ('definitions', 'title', 'description', '$schema', 'id')
+
     def __init__(self, class_list):
         # Create a mapping of a schema hash to a list of matching classes
         # This lets us quickly determine the correct class to construct
         self.class_dict = collections.defaultdict(list)
         for cls in class_list:
-            self.class_dict[hash_schema(self._get_schema(cls))].append(cls)
+            self.class_dict[self.hash_schema(self._get_schema(cls))].append(cls)
+
+    @classmethod
+    def hash_schema(cls, schema, use_json=True):
+        """
+        Compute a python hash for a nested dictionary which
+        properly handles dicts, lists, sets, and tuples.
+
+        At the top level, the function excludes from the hashed schema all keys
+        listed in `exclude_keys`.
+
+        This implements two methods: one based on conversion to JSON, and one based
+        on recursive conversions of unhashable to hashable types; the former seems
+        to be slightly faster in several benchmarks.
+        """
+        if cls._hash_exclude_keys:
+            schema = {key: val for key, val in schema.items()
+                      if key not in cls._hash_exclude_keys}
+        if use_json:
+            s = json.dumps(schema, sort_keys=True)
+            return hash(s)
+        else:
+            def _freeze(val):
+                if isinstance(val, dict):
+                    return frozenset((k, _freeze(v)) for k, v in val.items())
+                elif isinstance(val, set):
+                    return frozenset(map(_freeze, val))
+                elif isinstance(val, list) or isinstance(val, tuple):
+                    return tuple(map(_freeze, val))
+                else:
+                    return val
+            return hash(_freeze(schema))
+
+    def get_wrapper(self, schema):
+        hash_ = self.hash_schema(schema)
+        matches = self.class_dict[hash_]
+        if not matches:
+            return None
+        else:
+            # TODO: do something more sophisticated than
+            #       simply selecting the last match?
+            return matches[-1]
 
     def _get_schema(self, cls, resolve_refs=False):
         # "private" variable name mangling
@@ -162,7 +213,8 @@ class _FromDict(object):
 
     def from_dict(self, cls, dct, validate=True):
         # TODO: implement additionalProperties & patternProperties
-        # TODO: do something more than simply selecting the last match?
+        # TODO: introspect lists, objects, etc. when they don't have a wrapper.
+        #       could do this by passing the schema rather than cls.
         schema = self._get_schema(cls)
         if validate:
             jsonschema.validate(dct, self._get_schema(cls))
@@ -172,11 +224,11 @@ class _FromDict(object):
             schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
             for schema in schemas:
                 # TODO: in the no-match case, call from_dict on dict/list contents
-                matches = self.class_dict[hash_schema(schema)]
-                if not matches:
+                wrapper = self.get_wrapper(schema)
+                if wrapper is None:
                     continue
                 try:
-                    return self.from_dict(matches[-1], dct, validate=True)
+                    return self.from_dict(wrapper, dct, validate=True)
                 except TypeError:
                     continue
                 except jsonschema.ValidationError:
@@ -184,22 +236,24 @@ class _FromDict(object):
 
         if isinstance(dct, dict):
             props = schema.get('properties', {})
-            hashes = {prop: hash_schema(val) for prop, val in props.items()}
-            matches = {prop: self.class_dict[hash_] for prop, hash_ in hashes.items()}
-            wrappers = {prop: match[-1] for prop, match in matches.items() if match}
+            wrappers = {prop: self.get_wrapper(val)
+                        for prop, val in props.items()}
+            wrappers = {prop: wrapper for prop, wrapper in wrappers.items()
+                        if wrapper is not None}
             kwds = {key: (self.from_dict(wrappers[key], val, validate=False)
                           if key in wrappers else val)
                     for key, val in dct.items()}
             return cls(**kwds)
         elif isinstance(dct, list):
             if 'items' in schema:
-                hash_ = hash_schema(schema['items'])
-                wrapper = self.class_dict[hash_]
+                wrapper = self.get_wrapper(schema['items'])
             else:
-                wrapper = []
+                wrapper = None
 
-            if wrapper:
-                return cls([self.from_dict(wrapper[-1], val, validate=False)
+            if wrapper is not None:
+                return cls([self.from_dict(wrapper, val, validate=False)
                             for val in dct])
+            else:
+                return cls(dct)
 
         return cls(dct)

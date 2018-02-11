@@ -1,43 +1,11 @@
 """Utilities for working with schemas"""
 
 import keyword
-import json
 import re
 import textwrap
 
 
 EXCLUDE_KEYS = ('definitions', 'title', 'description', '$schema', 'id')
-
-
-def hash_schema(schema, use_json=True, exclude_keys=EXCLUDE_KEYS):
-    """
-    Compute a python hash for a nested dictionary which
-    properly handles dicts, lists, sets, and tuples.
-
-    At the top level, the function excludes from the hashed schema all keys
-    listed in `exclude_keys`.
-
-    This implements two methods: one based on conversion to JSON, and one based
-    on recursive conversions of unhashable to hashable types; the former seems
-    to be slightly faster in several benchmarks.
-    """
-    if exclude_keys:
-        schema = {key: val for key, val in schema.items()
-                  if key not in exclude_keys}
-    if use_json:
-        s = json.dumps(schema, sort_keys=True)
-        return hash(s)
-    else:
-        def _freeze(val):
-            if isinstance(val, dict):
-                return frozenset((k, _freeze(v)) for k, v in val.items())
-            elif isinstance(val, set):
-                return frozenset(map(_freeze, val))
-            elif isinstance(val, list) or isinstance(val, tuple):
-                return tuple(map(_freeze, val))
-            else:
-                return val
-        return hash(_freeze(schema))
 
 
 def resolve_references(schema, context=None):

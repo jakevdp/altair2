@@ -1,6 +1,7 @@
 import pytest
 
-from ..utils import resolve_references, get_valid_identifier, hash_schema
+from ..utils import resolve_references, get_valid_identifier
+from ..core import _FromDict
 
 
 @pytest.fixture
@@ -34,4 +35,4 @@ def test_hash_schema(refschema, use_json):
     copy = refschema.copy()
     copy['description'] = "A schema"
     copy['title'] = "Schema to test"
-    assert hash_schema(refschema) == hash_schema(copy)
+    assert _FromDict.hash_schema(refschema) == _FromDict.hash_schema(copy)
