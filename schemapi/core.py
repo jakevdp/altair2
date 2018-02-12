@@ -3,8 +3,6 @@ import json
 
 import jsonschema
 
-from .utils import resolve_references
-
 
 class UndefinedType(object):
     """A singleton object for marking undefined attributes"""
@@ -211,6 +209,7 @@ class _FromDict(object):
 
     @staticmethod
     def _passthrough(*args, **kwds):
+        """An object constructor that simply passes arguments through"""
         if kwds and not args:
             return kwds
         elif args and not kwds:
@@ -220,6 +219,7 @@ class _FromDict(object):
             raise ValueError("Both args and kwds supplied")
 
     def from_dict(self, constructor, root, schema, dct):
+        """Construct an object from a dict representation"""
         # TODO: introspect lists, objects, etc. when they don't have a wrapper.
         #       could do this by passing the schema rather than cls.
         schema = root.resolve_references(schema)

@@ -6,6 +6,35 @@ from ..core import UndefinedType
 
 
 @schemaclass
+class MySchema(SchemaBase):
+    _schema = {
+        'definitions': {
+            'StringMapping': {'type': 'object', 'additionalProperties': {'type': 'string'}},
+            'StringArray': {'type': 'array', 'items': {'type': 'string'}}
+        },
+        'properties': {
+            'a': {'$ref': '#/definitions/StringMapping'},
+            'a2': {'type': 'object', 'additionalProperties': {'type': 'number'}},
+            'b': {'$ref': '#/definitions/StringArray'},
+            'b2': {'type': 'array', 'items': {'type': 'number'}},
+            'c': {'type': ['string', 'number']},
+            'd': {'anyOf': [{'$ref': '#/definitions/StringMapping'},
+                            {'$ref': '#/definitions/StringArray'}]}
+        }
+    }
+
+@schemaclass
+class StringMapping(SchemaBase):
+    _schema = {'$ref': '#/definitions/StringMapping'}
+    _rootschema = MySchema._schema
+
+@schemaclass
+class StringArray(SchemaBase):
+    _schema = {'$ref': '#/definitions/StringArray'}
+    _rootschema = MySchema._schema
+
+
+@schemaclass
 class Derived(SchemaBase):
     _schema = {
         'definitions': {
@@ -29,25 +58,19 @@ class Derived(SchemaBase):
 
 @schemaclass
 class Foo(SchemaBase):
-    _schema = {
-        "$ref": "#/definitions/Foo"
-    }
+    _schema = {"$ref": "#/definitions/Foo"}
     _rootschema = Derived._schema
 
 
 @schemaclass
 class Bar(SchemaBase):
-    _schema = {
-        "$ref": "#/definitions/Bar"
-    }
+    _schema = {"$ref": "#/definitions/Bar"}
     _rootschema = Derived._schema
 
 
 @schemaclass
 class SimpleUnion(SchemaBase):
-    _schema = {
-        'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
-    }
+    _schema = {'anyOf' : [{'type': 'integer'}, {'type': 'string'}]}
 
 
 @schemaclass
@@ -82,6 +105,24 @@ class InvalidProperties(SchemaBase):
             '$schema': {}
         }
     }
+
+
+def test_construct_multifaceted_schema():
+    dct = {'a': {'foo': 'bar'}, 'a2': {'foo': 42},
+       'b': ['a', 'b', 'c'], 'b2': [1, 2, 3], 'c': 42,
+       'd': ['x', 'y', 'z']}
+
+    myschema = MySchema.from_dict(dct)
+    assert myschema.to_dict() == dct
+
+    myschema2 = MySchema(**dct)
+    assert myschema2.to_dict() == dct
+
+    assert isinstance(myschema.a, StringMapping)
+    assert isinstance(myschema.a2, dict)
+    assert isinstance(myschema.b, StringArray)
+    assert isinstance(myschema.b2, list)
+    assert isinstance(myschema.d, StringArray)
 
 
 def test_schema_cases():

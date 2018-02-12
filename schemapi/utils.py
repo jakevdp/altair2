@@ -54,26 +54,6 @@ def is_valid_identifier(var, allow_unicode=False):
     return is_valid and not keyword.iskeyword(var)
 
 
-def indent_function_args(funcname, arglist, indent=0, width=100):
-    initial_indent = subsequent_indent = (len(funcname) + indent + 1) * ' '
-    wrapper = textwrap.TextWrapper(width=width,
-                                   initial_indent=initial_indent,
-                                   subsequent_indent=subsequent_indent,
-                                   break_long_words=False)
-    return '{0}({1})'.format(funcname,
-                             '\n'.join(wrapper.wrap(', '.join(arglist))))
-
-
-
-def indent_line(line, initial_indent=0, width=120, initial_width=120,
-                subsequent_indent=4):
-    wrapper = textwrap.TextWrapper(width=width,
-                                   initial_indent=(width - initial_width)* ' ',
-                                   subsequent_indent=subsequent_indent * ' ',
-                                   break_long_words=False)
-    return '\n'.join(wrapper.wrap(line)).lstrip()
-
-
 class SchemaProperties(object):
     def __init__(self, properties, schema):
         self.__properties = properties
