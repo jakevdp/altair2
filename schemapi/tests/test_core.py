@@ -7,7 +7,7 @@ from ..core import UndefinedType
 
 @schemaclass
 class Derived(SchemaBase):
-    __schema = {
+    _schema = {
         'definitions': {
             'Foo': {
                 'type': 'object',
@@ -29,41 +29,41 @@ class Derived(SchemaBase):
 
 @schemaclass
 class Foo(SchemaBase):
-    __schema = {
-        "$ref": "#/definitions/Foo",
-        'definitions': Derived._Derived__schema['definitions']
+    _schema = {
+        "$ref": "#/definitions/Foo"
     }
+    _rootschema = Derived._schema
 
 
 @schemaclass
 class Bar(SchemaBase):
-    __schema = {
-        "$ref": "#/definitions/Bar",
-        'definitions': Derived._Derived__schema['definitions']
+    _schema = {
+        "$ref": "#/definitions/Bar"
     }
+    _rootschema = Derived._schema
 
 
 @schemaclass
 class SimpleUnion(SchemaBase):
-    __schema = {
+    _schema = {
         'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
     }
 
 
 @schemaclass
 class DefinitionUnion(SchemaBase):
-    __schema = {
+    _schema = {
         "anyOf": [
             {"$ref": "#/definitions/Foo"},
             {"$ref": "#/definitions/Bar"}
-        ],
-        "definitions": Derived._Derived__schema['definitions']
+        ]
     }
+    _rootschema = Derived._schema
 
 
 @schemaclass
 class SimpleArray(SchemaBase):
-    __schema = {
+    _schema = {
         'type': 'array',
         'items': {
             'anyOf' : [{'type': 'integer'}, {'type': 'string'}]
@@ -73,7 +73,7 @@ class SimpleArray(SchemaBase):
 
 @schemaclass(property_map=True)
 class InvalidProperties(SchemaBase):
-    __schema = {
+    _schema = {
         'type': 'object',
         'properties': {
             'for': {},

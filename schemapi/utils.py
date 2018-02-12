@@ -4,27 +4,18 @@ import keyword
 import re
 import textwrap
 
+import jsonschema
+
 
 EXCLUDE_KEYS = ('definitions', 'title', 'description', '$schema', 'id')
 
 
-def resolve_references(schema, context=None):
+def resolve_references(schema, root=None):
     """Resolve References within a JSON schema"""
-    if context is None:
-        context = schema
-    if '$ref' in schema:
-        address = schema['$ref'].split('/')
-        assert address[0] == '#'
-        schema = context
-        for key in address[1:]:
-            schema = schema[key]
-        return resolve_references(schema, context)
-    else:
-        # Add definitions
-        if 'definitions' in context and 'definitions' not in schema:
-            return dict(definitions=context['definitions'], **schema)
-        else:
-            return schema
+    resolver = jsonschema.RefResolver.from_schema(root or schema)
+    while '$ref' in schema:
+        ref, schema = resolver.resolve(schema['$ref'])
+    return schema
 
 
 def get_valid_identifier(prop, replacement_character='', allow_unicode=False):
@@ -114,12 +105,14 @@ class SchemaProperties(object):
 
 
 class SchemaInfo(object):
-    def __init__(self, schema):
-        if not isinstance(schema, dict):
-            schemaname = "_{0}__schema".format(schema.__name__)
-            schema = getattr(schema, schemaname)
+    def __init__(self, schema, rootschema=None):
+        if hasattr(schema, '_schema'):
+            if hasattr(schema, '_rootschema'):
+                schema, rootschema = schema._schema, schema._rootschema
+            else:
+                schema, rootschema = schema._schema, schema._schema
         self.raw_schema = schema
-        self.schema = resolve_references(self.raw_schema)
+        self.schema = resolve_references(schema, rootschema)
 
     def __repr__(self):
         keys = []

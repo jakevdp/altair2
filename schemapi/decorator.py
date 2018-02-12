@@ -31,12 +31,11 @@ def schemaclass(*args, init_func=True, docstring=True, property_map=True):
             __schema = {...}
     """
     def _decorator(cls, init_func=init_func, docstring=docstring):
-        if not issubclass(cls, SchemaBase):
+        if not (isinstance(cls, type) and issubclass(cls, SchemaBase)):
             warnings.warn("class is not an instance of SchemaBase.")
 
         name = cls.__name__
-        schema_name = '_{0}__schema'.format(name)
-        schema = SchemaInfo(getattr(cls, schema_name, {}))
+        schema = SchemaInfo(cls)
 
         if init_func and '__init__' not in cls.__dict__:
             init_code = codegen.init_code(name, schema.schema)

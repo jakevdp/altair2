@@ -134,17 +134,22 @@ class SchemaBase(object):
         jsonschema.ValidationError :
             if validate=True and dct does not conform to the schema
         """
+        if validate:
+            cls.validate(dct)
         converter = _FromDict(SchemaBase.__subclasses__())
-        return converter.from_dict(cls, self._schema, dct, validate=validate)
+        return converter.from_dict(constructor=cls, root=cls,
+                                   schema=cls._schema, dct=dct)
 
     @classmethod
-    def validate(cls, instance):
+    def validate(cls, instance, schema=None):
         """
         Validate the instance against the class schema in the context of the
         roootschema.
         """
+        if schema is None:
+            schema = cls._schema
         resolver = jsonschema.RefResolver.from_schema(cls._rootschema or cls._schema)
-        return jsonschema.validate(instance, cls._schema, resolver=resolver)
+        return jsonschema.validate(instance, schema, resolver=resolver)
 
     @classmethod
     def resolve_references(cls, schema):
@@ -171,7 +176,7 @@ class _FromDict(object):
         # This lets us quickly determine the correct class to construct
         self.class_dict = collections.defaultdict(list)
         for cls in class_list:
-            self.class_dict[self.hash_schema(self._get_schema(cls))].append(cls)
+            self.class_dict[self.hash_schema(cls._schema)].append(cls)
 
     @classmethod
     def hash_schema(cls, schema, use_json=True):
@@ -204,59 +209,60 @@ class _FromDict(object):
                     return val
             return hash(_freeze(schema))
 
-    def _get_schema(self, cls, resolve_refs=False):
-        # "private" variable name mangling
-        schema = getattr(cls, '_{0}__schema'.format(cls.__name__), {})
-        if resolve_refs:
-            schema = resolve_references(schema)
-        return schema
+    @staticmethod
+    def _passthrough(*args, **kwds):
+        if kwds and not args:
+            return kwds
+        elif args and not kwds:
+            assert len(args) == 1
+            return args[0]
+        else:
+            raise ValueError("Both args and kwds supplied")
 
-    def from_dict(self, constructor, schema, dct, validate=True):
+    def from_dict(self, constructor, root, schema, dct):
         # TODO: introspect lists, objects, etc. when they don't have a wrapper.
         #       could do this by passing the schema rather than cls.
-        if validate:
-            jsonschema.validate(dct, schema)
-        schema = resolve_references(schema)
+        schema = root.resolve_references(schema)
 
-        def get_wrapper(schema):
+        def _get_constructor(schema):
             # TODO: do something more than simply selecting the last match?
             hash_ = self.hash_schema(schema)
             matches = self.class_dict[hash_]
-            if not matches:
-                return lambda x: x
-            else:
-                return matches[-1]
+            constructor = matches[-1] if matches else self._passthrough
+            schema = root.resolve_references(schema)
+            return constructor, schema
 
         if 'anyOf' in schema or 'oneOf' in schema:
             schemas = schema.get('anyOf', []) + schema.get('oneOf', [])
-            for schema in schemas:
-                wrapper = get_wrapper(schema)
+            for this_schema in schemas:
+                this_constructor, this_schema = _get_constructor(this_schema)
                 try:
-                    return self.from_dict(wrapper, schema, dct, validate=True)
-                except TypeError:
-                    continue
+                    root.validate(dct, this_schema)
                 except jsonschema.ValidationError:
                     continue
+                else:
+                    return self.from_dict(this_constructor, root, this_schema, dct)
 
         if isinstance(dct, dict):
             # TODO: handle schemas for additionalProperties/patternProperties
             props = schema.get('properties', {})
-            wrappers = {prop: get_wrapper(val)
-                        for prop, val in props.items()}
-            print(props)
-            print(wrappers)
-            kwds = {key: (self.from_dict(wrappers[key], props[key], val, validate=False)
-                          if key in wrappers else val)
-                    for key, val in dct.items()}
+            kwds = {}
+            for key, val in dct.items():
+                if key in props:
+                    prop_constructor, prop_schema = _get_constructor(props[key])
+                    val = self.from_dict(prop_constructor, root, prop_schema, val)
+                kwds[key] = val
             return constructor(**kwds)
+
         elif isinstance(dct, list):
             if 'items' in schema:
-                itemschema = schema['items']
-                wrapper = get_wrapper(schema['items'])
+                item_schema = schema['items']
+                item_constructor, item_schema = _get_constructor(item_schema)
             else:
-                itemschema = {}
-                wrapper = lambda x: x
-            return constructor([self.from_dict(wrapper, itemschema, val, validate=False)
-                                for val in dct])
+                item_schema = {}
+                item_constructor = self._passthrough
+            dct = [self.from_dict(item_constructor, root, item_schema, val)
+                   for val in dct]
+            return constructor(dct)
         else:
             return constructor(dct)

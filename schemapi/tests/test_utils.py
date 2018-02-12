@@ -16,11 +16,6 @@ def refschema():
     }
 
 
-def test_resolve_references(refschema):
-    assert resolve_references(refschema) == {'type': 'string',
-                                             'definitions': refschema['definitions']}
-
-
 def test_get_valid_identifier():
     assert get_valid_identifier('$schema') == 'schema'
     assert get_valid_identifier('$ref') == 'ref'
